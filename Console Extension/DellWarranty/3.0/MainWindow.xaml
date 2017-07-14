@@ -1,0 +1,20 @@
+<Window         
+	xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" 
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" 
+	Name="Window" Title="Dell Warranty Tool 3.0" Height="350" Width="600" WindowStartupLocation="CenterScreen" Background="#FFE5E5E5" Topmost="False">
+	<Grid>
+        <DataGrid Name="DataGrid_Main" HorizontalAlignment="Left" Margin="10,71,0,0" VerticalAlignment="Top" Height="208" Width="565" Background="#FFE5E5E5" SelectionMode="Single" AutoGenerateColumns="True" IsReadOnly="True" AlternationCount="2" AlternatingRowBackground="#FFDBDBDC" GridLinesVisibility="None" HeadersVisibility="Column" ColumnWidth="*"/>
+        <GroupBox Name="GroupBox_DeviceName" Header="Device Name" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Height="50" Width="137">
+            <TextBox Name="TextBox_DeviceName" HorizontalAlignment="Left" Height="23" Margin="4,2,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" IsEnabled="False"/>
+        </GroupBox>
+        <GroupBox Name="GroupBox_ServiceTag" Header="Service Tag" HorizontalAlignment="Left" Margin="160,10,0,0" VerticalAlignment="Top" Height="50" Width="137">
+            <TextBox Name="TextBox_ServiceTag" HorizontalAlignment="Left" Height="23" Margin="4,2,-2.333,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" IsEnabled="False"/>
+        </GroupBox>
+        <GroupBox Name="GroupBox_Model" Header="Model" HorizontalAlignment="Left" Margin="310,10,0,0" VerticalAlignment="Top" Height="50" Width="137">
+            <TextBox Name="TextBox_Model" HorizontalAlignment="Left" Height="23" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" Margin="4,2,0,0" IsEnabled="False"/>
+        </GroupBox>
+        <Button Name="Button_Start" Content="Get Warranty" HorizontalAlignment="Left" Margin="464,17,0,0" VerticalAlignment="Top" Width="100" Height="23"/>
+        <CheckBox Name="CheckBox_SandBox" Content="Sandbox mode" HorizontalAlignment="Left" Margin="463,45,0,0" VerticalAlignment="Top" Width="106"/>
+        <ProgressBar Name="ProgressBar_Main" HorizontalAlignment="Left" Height="10" Margin="10,290,0,0" VerticalAlignment="Top" Width="565"/>
+    </Grid>
+</Window>

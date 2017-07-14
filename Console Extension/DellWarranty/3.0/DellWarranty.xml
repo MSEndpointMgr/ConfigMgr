@@ -1,0 +1,21 @@
+<ActionDescription Class="Executable" DisplayName="Dell Warranty" MnemonicDisplayName="Dell Warranty" Description="Dell Warranty" SqmDataPoint="53">
+  <ShowOn>
+    <string>DefaultHomeTab</string>
+    <string>ContextMenu</string>
+  </ShowOn>
+  <ResourceAssembly>
+    <Assembly>AdminUI.CollectionProperty.dll</Assembly>
+    <Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+  </ResourceAssembly>
+  <ImagesDescription>
+    <ResourceAssembly>
+      <Assembly>AdminUI.UIResources.dll</Assembly>
+      <Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+    </ResourceAssembly>
+    <ImageResourceName>Information</ImageResourceName>
+  </ImagesDescription>
+  <Executable>
+    <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+    <Parameters>-sta -WindowStyle Hidden -ExecutionPolicy ByPass -File "C:\Scripts\DellWarranty\Invoke-DellWarrantyTool_3.0.ps1" -SiteServer ##SUB:__Server## -APIKey YOURAPIKEY -DeviceName ##SUB:Name## -ResourceID ##SUB:ResourceID##</Parameters>
+  </Executable>
+</ActionDescription>

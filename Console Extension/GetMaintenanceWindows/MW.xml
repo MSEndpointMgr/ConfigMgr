@@ -1,0 +1,20 @@
+<ActionDescription Class="Executable" DisplayName="Show Maintenance Windows" MnemonicDisplayName="Show Maintenance Windows" Description="Show Maintenance Windows" SqmDataPoint="53">
+	<ShowOn>
+		<string>ContextMenu</string>
+	</ShowOn>
+    <ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>Information</ImageResourceName>
+	</ImagesDescription>
+	<Executable>
+		<FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+		<Parameters>-windowstyle hidden -executionpolicy bypass -file "C:\Scripts\Get-MaintenanceWindows.ps1" -SiteServer "##SUB:__Server##" -SiteCode "##SUB:SiteCode##" -ResourceID "##SUB:ResourceID##"</Parameters>
+	</Executable>
+</ActionDescription>

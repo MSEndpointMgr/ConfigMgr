@@ -1,0 +1,21 @@
+<ActionDescription Class="Executable" DisplayName="Create Software Update Group" MnemonicDisplayName="Create Software Update Group" Description="Create Software Update Group" SqmDataPoint="53">
+	<ShowOn>
+		<string>DefaultHomeTab</string>
+		<string>ContextMenu</string>
+	</ShowOn>
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+		<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+	<ImagesDescription>
+		<ResourceAssembly>
+			<Assembly>AdminUI.UIResources.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+		</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+	<Executable>
+		<FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+		<Parameters>-WindowStyle Hidden -ExecutionPolicy ByPass -File #PATH# -SiteServer #SERVER#</Parameters>
+	</Executable>
+</ActionDescription>

@@ -1,0 +1,188 @@
+<ActionDescription Class="Group" DisplayName="Clean Software Update Groups" MnemonicDisplayName="Clean Software Update Groups" Description="Clean Software Update Groups" SqmDataPoint="53">
+ 
+  <ShowOn>
+    <string>DefaultHomeTab</string>
+    <string>ContextMenu</string>
+  </ShowOn>
+  
+    <ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+  <ActionGroups>
+    <ActionDescription Class="Executable" DisplayName="Expired and Superseded (Remove content)" MnemonicDisplayName="Expired and Superseded (Remove content)" Description="Expired and Superseded (Remove content)">
+ 
+    <ShowOn>
+	<string>DefaultHomeTab</string>
+        <string>ContextMenu</string>
+    </ShowOn>
+	  
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+    <Executable>
+        <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+        <Parameters>-executionpolicy bypass -file #PATH# -SiteServer #SERVER# -Option ExpiredSuperseded -RemoveContent -ShowProgress -Verbose</Parameters>
+      </Executable>
+    </ActionDescription>
+ 
+  </ActionGroups>
+
+  <ActionGroups>
+    <ActionDescription Class="Executable" DisplayName="Expired and Superseded (Keep content)" MnemonicDisplayName="Expired and Superseded (Keep content)" Description="Expired and Superseded (Keep content)">
+ 
+    <ShowOn>
+	<string>DefaultHomeTab</string>
+        <string>ContextMenu</string>
+    </ShowOn>
+	  
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+    <Executable>
+        <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+        <Parameters>-executionpolicy bypass -file #PATH# -SiteServer #SERVER# -Option ExpiredSuperseded -ShowProgress -Verbose</Parameters>
+      </Executable>
+    </ActionDescription>
+ 
+  </ActionGroups>
+
+  <ActionGroups>
+    <ActionDescription Class="Executable" DisplayName="Expired Only (Remove content)" MnemonicDisplayName="Expired Only (Remove content)" Description="Expired Only (Remove content)">
+ 
+    <ShowOn>
+	<string>DefaultHomeTab</string>
+        <string>ContextMenu</string>
+    </ShowOn>
+	  
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+    <Executable>
+        <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+        <Parameters>-executionpolicy bypass -file #PATH# -SiteServer #SERVER# -Option ExpiredOnly -RemoveContent -ShowProgress -Verbose</Parameters>
+      </Executable>
+    </ActionDescription>
+ 
+  </ActionGroups>
+
+  <ActionGroups>
+    <ActionDescription Class="Executable" DisplayName="Expired Only (Keep content)" MnemonicDisplayName="Expired Only (Keep content)" Description="Expired Only (Keep content)">
+ 
+    <ShowOn>
+	<string>DefaultHomeTab</string>
+        <string>ContextMenu</string>
+    </ShowOn>
+	  
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+    <Executable>
+        <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+        <Parameters>-executionpolicy bypass -file #PATH# -SiteServer #SERVER# -Option ExpiredOnly -ShowProgress -Verbose</Parameters>
+      </Executable>
+    </ActionDescription>
+ 
+  </ActionGroups>
+  
+    <ActionGroups>
+    <ActionDescription Class="Executable" DisplayName="Superseded Only (Remove content)" MnemonicDisplayName="Superseded Only (Remove content)" Description="Superseded Only (Remove content)">
+ 
+    <ShowOn>
+	<string>DefaultHomeTab</string>
+        <string>ContextMenu</string>
+    </ShowOn>
+	  
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+    <Executable>
+        <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+        <Parameters>-executionpolicy bypass -file #PATH# -SiteServer #SERVER# -Option SupersededOnly -RemoveContent -ShowProgress -Verbose</Parameters>
+      </Executable>
+    </ActionDescription>
+ 
+  </ActionGroups>
+
+  <ActionGroups>
+    <ActionDescription Class="Executable" DisplayName="Superseded Only (Keep content)" MnemonicDisplayName="Superseded Only (Keep content)" Description="Superseded Only (Keep content)">
+ 
+    <ShowOn>
+	<string>DefaultHomeTab</string>
+        <string>ContextMenu</string>
+    </ShowOn>
+	  
+	<ResourceAssembly>
+		<Assembly>AdminUI.CollectionProperty.dll</Assembly>
+			<Type>Microsoft.ConfigurationManagement.AdminConsole.CollectionProperty.Properties.Resources.resources</Type>
+	</ResourceAssembly>
+		<ImagesDescription>
+			<ResourceAssembly>
+				<Assembly>AdminUI.UIResources.dll</Assembly>
+				<Type>Microsoft.ConfigurationManagement.AdminConsole.UIResources.Properties.Resources.resources</Type>
+			</ResourceAssembly>
+		<ImageResourceName>SUM_Update</ImageResourceName>
+	</ImagesDescription>
+ 
+    <Executable>
+        <FilePath>"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"</FilePath>
+        <Parameters>-executionpolicy bypass -file #PATH# -SiteServer #SERVER# -Option SupersededOnly -ShowProgress -Verbose</Parameters>
+      </Executable>
+    </ActionDescription>
+ 
+  </ActionGroups>
+
+</ActionDescription>
