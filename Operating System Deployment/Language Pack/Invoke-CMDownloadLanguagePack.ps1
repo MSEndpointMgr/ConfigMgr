@@ -28,11 +28,11 @@
     FileName:    Invoke-CMDownloadLanguagePack.ps1
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
-    Created:     2017-04-12
-    Updated:     2017-04-12
+    Created:     2017-07-22
+    Updated:     2017-07-22
     
     Version history:
-    1.0.0 - (2017-04-12) Script created
+    1.0.0 - (2017-07-22) Script created
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -111,10 +111,11 @@ Process {
     Write-CMLogEntry -Value "Language Pack download process initiated" -Severity 1
 
     # Determine currently installed language packs and system culture
-    $CurrentLanguagePacks = Get-WmiObject -Class Win32_OperatingSystem | Select-Object -ExpandProperty MUILanguages
-    Write-CMLogEntry -Value "Detected language packs installed: $($CurrentLanguagePacks -join ", ")" -Severity 1
     $DefaultSystemCulture = [CultureInfo]::InstalledUICulture | Select-Object -ExpandProperty Name
-    Write-CMLogEntry -Value "Detected default system culture: $($DefaultSystemCulture)" -Severity 1
+    Write-CMLogEntry -Value "Installed UI culture detected: $($DefaultSystemCulture)" -Severity 1
+    $CurrentLanguagePacks = Get-WmiObject -Class Win32_OperatingSystem | Select-Object -ExpandProperty MUILanguages
+    Write-CMLogEntry -Value "Current language packs installed including installed UI culture: $($CurrentLanguagePacks -join ", ")" -Severity 1
+
 
     # Detect whether script should continue if more than 1 language pack is installed
     if (($CurrentLanguagePacks | Measure-Object).Count -ge 2) {
@@ -139,10 +140,10 @@ Process {
         # Construct array list for matching packages
         $PackageList = New-Object -TypeName System.Collections.ArrayList
 
-        # Determine packages matching operating system build number and architecture specified as in-parameters including currently installed language packs
+        # Determine packages matching operating system build number and architecture specified as in-parameters for the currently installed language packs
         if ($Packages -ne $null) {
             foreach ($Package in $Packages) {
-                if ($Package.PackageName -match ($OSArchitecture) -and ($Package.PackageVersion -like $BuildNumber) -and ($Package.PackageLanguage -in $CurrentLanguagePacks)) {
+                if ($Package.PackageName -match ($OSArchitecture) -and ($Package.PackageVersion -like $BuildNumber) -and ($Package.PackageLanguage -in $CurrentLanguagePacks) -and ($Package.PackageLanguage -notlike $DefaultSystemCulture)) {
                     $PackageList.Add($Package) | Out-Null
                     Write-CMLogEntry -Value "Found matching language pack: $($Package.PackageName)" -Severity 1
                 }
@@ -167,7 +168,7 @@ Process {
             }
         }
         else {
-            Write-CMLogEntry -Value "Empty language pack list detected, bailing out" -Severity 2 ; exit 1
+            Write-CMLogEntry -Value "Empty language pack list detected, bailing out" -Severity 1
         }
     }
     else {
