@@ -19,14 +19,14 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2017-07-19
+    Updated:     2017-07-25
     
     Version history:
     1.0.0 - (2017-05-22) Script created (Nickolaj Andersen)
     1.0.1 - (2017-07-07) Updated with BIOS revision checker. Initially used for Dell systems (Maurice Daly)
     1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models (Maurice Daly)
     1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models (Maurice Daly)
-    1.0.4 - (2017-07-24) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
+    1.0.4 - (2017-07-25) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -164,10 +164,13 @@ Process {
         }
         "*Lenovo*" {
             $ComputerManufacturer = "Lenovo"
-            $ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+            <#$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
             if ($ComputerModel -eq $Null){
                 $ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0,4)).Trim()
             }
+            #>
+            $ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0,4)).Trim()
+            $ComputerName = ((Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object Name).SubString(0,4)).Trim()
         }
     }
     Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
@@ -209,7 +212,11 @@ Process {
                 if (($Package.PackageName -match $ComputerModel) -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {                            
                     Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
                     $PackageList.Add($Package) | Out-Null
-                }		
+                }
+                elseif ((($Package.PackageDescription.Split(":")[1].Trimend(")")) -match $ComputerModel) -and ($ComputerManufacturer -match $Package.PackageManufacturer))	{
+                    Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+                    $PackageList.Add($Package) | Out-Null
+                }	
                 else {
                     Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
                 }
@@ -222,8 +229,13 @@ Process {
                     Write-CMLogEntry -Value "BIOS package list contains a single match, attempting to set task sequence variable" -Severity 1
 
                     # Check if BIOS package is newer than currently installed
-                    Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion  -AvailableBIOSReleaseDate $(($Package.PackageDescription).Split(":")[2]).Trimend(")")
-
+                    if ($ComputerManufacturer -match "Dell"){
+                        Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion
+                    }
+                    elseif ($ComputerManufacturer -match "Lenovo"){
+                        Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion  -AvailableBIOSReleaseDate $(($Package.PackageDescription).Split(":")[2]).Trimend(")")
+                    }
+                    
                     if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
                         # Attempt to set task sequence variable
                         try {
@@ -242,24 +254,50 @@ Process {
                     Write-CMLogEntry -Value "BIOS package list contains multiple matches, attempting to set task sequence variable" -Severity 1
 
                     # Determine the latest BIOS package by creation date
-                    $Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
-
-                    # Check if bios package is newer than currently installed
-                    Compare-BIOSVersion -AvailableBIOSVersion $Package.PackageVersion -AvailableBIOSReleaseDate $(($Package.PackageDescription).Split(":")[2]).Trimend(")")
-
-                    if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
-                        # Attempt to set task sequence variable
-                        try {
-                            $TSEnvironment.Value("OSDDownloadDownloadPackages") = $($Package.PackageID)
-                            Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($Package.PackageID)" -Severity 1
+                    if ($Manufacturer -match "Dell")
+                    {
+                        $Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+                    }
+                    elseif ($Manufacturer -eq "Lenovo")
+                    {
+                        If ($Package -ne $null)
+                        {
+                            $ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+                            # Attempt to find exact model match for Lenovo models which overlap model types
+                            $Package = $PackageList | Where-object {$_.PackageDescription -like "*$($ComputerDescription.Split(' ') | Select-object -Last 1)" }
                         }
-                        catch [System.Exception] {
-                            Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3 ; exit 1
-                        }                        
+                        else{
+                             # Fall back to select the latest model type match if no model name match is found
+                            $Package = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
+                        }
+                    }
+
+                    if ($Package.Count -eq 1)
+                    {
+                        # Check if BIOS package is newer than currently installed
+                        if ($ComputerManufacturer -match "Dell"){
+                            Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion
+                        }
+                        elseif ($ComputerManufacturer -match "Lenovo"){
+                            Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion  -AvailableBIOSReleaseDate $(($Package.PackageDescription).Split(":")[2]).Trimend(")")
+                        }
+
+                        if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
+                            # Attempt to set task sequence variable
+                            try {
+                                $TSEnvironment.Value("OSDDownloadDownloadPackages") = $($Package.PackageID)
+                                Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($Package.PackageID)" -Severity 1
+                            }
+                            catch [System.Exception] {
+                                Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3 ; exit 1
+                            }                        
+                        }
+                        else {
+                            Write-CMLogEntry -Value "BIOS is already up to date with the latest $($Package.PackageVersion) version" -Severity 1
+                        }
                     }
                     else {
-                        Write-CMLogEntry -Value "BIOS is already up to date with the latest $($Package.PackageVersion) version" -Severity 1
-                    }
+                        Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
                 }
                 else {
                     Write-CMLogEntry -Value "Unable to determine a matching BIOS package from list since an unsupported count was returned from package list, bailing out" -Severity 2 ; exit 1
