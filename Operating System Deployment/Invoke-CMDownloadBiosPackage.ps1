@@ -173,11 +173,6 @@ Process
 		}
 		"*Lenovo*" {
 			$ComputerManufacturer = "Lenovo"
-            <#$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
-            if ($ComputerModel -eq $Null){
-                $ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0,4)).Trim()
-            }
-            #>
 			$ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 			$ComputerName = ((Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Name).SubString(0, 4)).Trim()
 		}
