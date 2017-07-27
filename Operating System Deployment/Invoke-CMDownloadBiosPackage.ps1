@@ -283,11 +283,11 @@ Process
 					Write-CMLogEntry -Value "BIOS package list contains multiple matches, attempting to set task sequence variable" -Severity 1
 					
 					# Determine the latest BIOS package by creation date
-					if ($Manufacturer -match "Dell")
+					if ($ComputerManufacturer -match "Dell")
 					{
 						$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 					}
-					elseif ($Manufacturer -eq "Lenovo")
+					elseif ($ComputerManufacturer -eq "Lenovo")
 					{
 						If ($Package -ne $null)
 						{
