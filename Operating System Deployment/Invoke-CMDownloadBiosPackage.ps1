@@ -19,14 +19,14 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2017-07-25
+    Updated:     2017-07-27
     
     Version history:
     1.0.0 - (2017-05-22) Script created (Nickolaj Andersen)
     1.0.1 - (2017-07-07) Updated with BIOS revision checker. Initially used for Dell systems (Maurice Daly)
     1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models (Maurice Daly)
     1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models (Maurice Daly)
-    1.0.4 - (2017-07-25) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
+    1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
