@@ -173,6 +173,11 @@ Process
 		}
 		"*Lenovo*" {
 			$ComputerManufacturer = "Lenovo"
+            <#$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+            if ($ComputerModel -eq $Null){
+                $ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0,4)).Trim()
+            }
+            #>
 			$ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 			$ComputerName = ((Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Name).SubString(0, 4)).Trim()
 		}
@@ -217,31 +222,32 @@ Process
 			# Add packages with matching criteria to list
 			foreach ($Package in $Packages)
 			{
-				# Match model, manufacturer criteria
-				if ($ComputerManufacturer -eq "Dell")
-				{
-					if (($Package.PackageName -match $ComputerModel) -and ($ComputerManufacturer -match $Package.PackageManufacturer))
+				if ($Package.PackageManufacturer -ne $null) {
+					# Match model, manufacturer criteria
+					if ($ComputerManufacturer -eq "Dell")
 					{
-						Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
-						$PackageList.Add($Package) | Out-Null
+						if (($Package.PackageName -match $ComputerModel) -and ($ComputerManufacturer -match $Package.PackageManufacturer))
+						{
+							Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+							$PackageList.Add($Package) | Out-Null
+						}
+						else{
+							Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+						}
+					}
+					
+					if (($ComputerManufacturer -eq "Lenovo") -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and (($Package.PackageDescription.Split(":")[1]) -ne $null))
+					{
+							if (($Package.PackageDescription.Split(":")[1].Trimend(")")) -match $ComputerModel)
+							{
+								Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+								$PackageList.Add($Package) | Out-Null
+							}
 					}
 					else{
 						Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 					}
 				}
-				
-				if ($ComputerManufacturer -eq "Lenovo")
-				{
-					if ((($Package.PackageDescription.Split(":")[1].Trimend(")")) -match $ComputerModel) -and ($ComputerManufacturer -match $Package.PackageManufacturer))
-					{
-						Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
-						$PackageList.Add($Package) | Out-Null
-					}
-				}
-				else{
-					Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
-				}
-				
 			}
 			
 			# Process matching items in package list and set task sequence variable
@@ -293,27 +299,27 @@ Process
 						{
 							$ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
 							# Attempt to find exact model match for Lenovo models which overlap model types
-							$Package = $PackageList | Where-object { $_.PackageDescription -like "*$($ComputerDescription.Split(' ') | Select-object -First 1)*$($ComputerDescription.Split(' ') | Select-object -Last 1)" }
+							$PackageList = $PackageList | Where-object { (($_.PackageDescription.Split("(")[0]) -match ("$ComputerDescription BIOS")) }
+							#$Package.PackageDescription.Split("(")[0]) -match (Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version) +" BIOS")
 						}
 						else{
 							# Fall back to select the latest model type match if no model name match is found
 							$Package = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
 						}
 					}
-					
-					if ($Package.Count -eq 1)
+					if ($PackageList.Count -eq 1)
 					{
 						# Check if BIOS package is newer than currently installed
 						if ($ComputerManufacturer -match "Dell")
 						{
-							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion
+							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
 						}
 						elseif ($ComputerManufacturer -match "Lenovo")
 						{
-							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -AvailableBIOSReleaseDate $(($Package.PackageDescription).Split(":")[2]).Trimend(")")
+							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -AvailableBIOSReleaseDate $(($PackageList[0].PackageDescription).Split(":")[2]).Trimend(")")  -ComputerManufacturer $ComputerManufacturer
 						}
 						else{
-							Write-CMLogEntry -Value "BIOS is already up to date with the latest $($Package.PackageVersion) version" -Severity 1
+							Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
 						}
 						
 						if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true)
@@ -321,7 +327,7 @@ Process
 							# Attempt to set task sequence variable
 							try
 							{
-								$TSEnvironment.Value("OSDDownloadDownloadPackages") = $($Package.PackageID)
+								$TSEnvironment.Value("OSDDownloadDownloadPackages") = $($PackageList[0].PackageID)
 								Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($Package.PackageID)" -Severity 1
 							}
 							catch [System.Exception] {
