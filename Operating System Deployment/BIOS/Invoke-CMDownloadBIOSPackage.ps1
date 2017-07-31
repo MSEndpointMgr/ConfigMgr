@@ -146,8 +146,8 @@ Process
 		{
 			# Obtain current BIOS release
 			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select -Property *).ReleaseDate).SubString(0, 8)
-            Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
-             Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
+            		Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
+            		Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
 
 			# Compare current BIOS release to available
 			if ($AvailableBIOSReleaseDate -gt $CurrentBIOSReleaseDate)
@@ -294,11 +294,9 @@ Process
 					{
 						If ($Package -ne $null)
 						{
-							#$ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+							$ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
 							# Attempt to find exact model match for Lenovo models which overlap model types
-                            $PackageList = $PackageList | Where-object {($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)}
-							#$PackageList = $PackageList | Where-object { (($_.PackageDescription.Split("(")[0]) -match ("$ComputerDescription BIOS")) }
-							#$Package.PackageDescription.Split("(")[0]) -match (Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version) +" BIOS")
+                          				$PackageList = $PackageList | Where-object {($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)}
 						}
 						else{
 							# Fall back to select the latest model type match if no model name match is found
