@@ -110,7 +110,7 @@ Process
 		{
 			# Obtain current BIOS release
 			$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-            Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
+           		Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 						
 			# Determine Dell BIOS revision format			
 			if ($CurrentBIOSVersion -like "*.*.*")
