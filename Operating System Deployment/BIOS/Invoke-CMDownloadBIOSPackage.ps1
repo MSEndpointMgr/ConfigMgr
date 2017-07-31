@@ -69,9 +69,8 @@ Process
 			[string]$FileName = "BIOSPackageDownload.log"
 		)
 		# Determine log file location
-		#$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
-        $LogFilePath = Join-Path -Path "C:\" -ChildPath $FileName
-		
+		$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
+               		
 		# Construct time stamp for log entry
 		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
 		
@@ -167,7 +166,7 @@ Process
 	#$ComputerManufacturer = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Manufacturer).Trim()
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	
-	<# Determine manufacturer name and computer model
+	Determine manufacturer name and computer model
 	switch -Wildcard ($ComputerManufacturer)
 	{
 		"*Dell*" {
@@ -179,7 +178,7 @@ Process
 			$ComputerModel = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 			$ComputerName = ((Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Name).SubString(0, 4)).Trim()
 		}
-	}#>
+	}
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	
 	# Get existing BIOS version
