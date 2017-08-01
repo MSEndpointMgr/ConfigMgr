@@ -163,10 +163,10 @@ Process
 	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
 	# Determine manufacturer
-	#$ComputerManufacturer = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Manufacturer).Trim()
+	$ComputerManufacturer = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Manufacturer).Trim()
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	
-	Determine manufacturer name and computer model
+	# Determine manufacturer name and computer model
 	switch -Wildcard ($ComputerManufacturer)
 	{
 		"*Dell*" {
