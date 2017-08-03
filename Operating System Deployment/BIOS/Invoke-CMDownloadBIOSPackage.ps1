@@ -288,7 +288,7 @@ Process
 					# Determine the latest BIOS package by creation date
 					if ($ComputerManufacturer -match "Dell")
 					{
-						$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+						$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 					}
 					elseif ($ComputerManufacturer -eq "Lenovo")
 					{
@@ -300,7 +300,7 @@ Process
 						}
 						else{
 							# Fall back to select the latest model type match if no model name match is found
-							$Package = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
+							$PackageList = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
 						}
 					}
 					if ($PackageList.Count -eq 1)
