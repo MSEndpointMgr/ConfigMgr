@@ -292,13 +292,12 @@ Process
 					}
 					elseif ($ComputerManufacturer -eq "Lenovo")
 					{
-						If ($Package -ne $null)
+						$ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+						# Attempt to find exact model match for Lenovo models which overlap model types
+                          			$PackageList = $PackageList | Where-object {($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)}
+						
+						If ($PackageList -ne $null)
 						{
-							$ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
-							# Attempt to find exact model match for Lenovo models which overlap model types
-                          				$PackageList = $PackageList | Where-object {($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)}
-						}
-						else{
 							# Fall back to select the latest model type match if no model name match is found
 							$PackageList = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
 						}
