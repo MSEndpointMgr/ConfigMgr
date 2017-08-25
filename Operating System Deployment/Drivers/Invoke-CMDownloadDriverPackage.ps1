@@ -31,7 +31,7 @@
     1.0.6 - (2017-05-22) Updated script to detect the proper package based upon OS Image version referenced in task sequence when multiple packages are detected
     1.0.7 - (2017-05-26) Updated script to filter OS when multiple model matches are found for different OS platforms
     1.0.8 - (2017-06-26) Updated with improved computer name matching when filtering out packages returned from the web service
-	1.0.9 - (2017-08-25) Updated script to read package description for Microsoft models in order to match the WMI value contained within
+    1.0.9 - (2017-08-25) Updated script to read package description for Microsoft models in order to match the WMI value contained within
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
