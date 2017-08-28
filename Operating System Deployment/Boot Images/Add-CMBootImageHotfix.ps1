@@ -145,7 +145,12 @@ Process {
 
                     # Validate mount folder exist, if not create it
                     if (-not(Test-Path -Path $MountPath -PathType Container)) {
-
+                        try {
+                            New-Item -Path $MountPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                        }
+                        catch [System.Exception] {
+                            Write-Warning -Message "An error occurred while creating the mount folder. Error message: $($_.Exception.Message)" ; break
+                        }
                     }
 
                     try {
