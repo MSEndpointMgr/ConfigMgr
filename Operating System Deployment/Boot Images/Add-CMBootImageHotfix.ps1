@@ -86,10 +86,10 @@ param(
 	    }
 	    else {
 		    # Check if the whole directory path exists
-		    if (-not(Test-Path -Path (Split-Path -Path $_) -PathType Container -ErrorAction SilentlyContinue)) {
-			    Write-Warning -Message "Unable to locate part of or the whole specified path" ; break
+		    if (-not(Test-Path -Path $_ -PathType Container -ErrorAction SilentlyContinue)) {
+			    Write-Warning -Message "Unable to locate part of or the whole specified mount path" ; break
 		    }
-		    elseif (Test-Path -Path (Split-Path -Path $_) -PathType Container -ErrorAction SilentlyContinue) {
+		    elseif (Test-Path -Path $_ -PathType Container -ErrorAction SilentlyContinue) {
 			    return $true
 		    }
 		    else {
@@ -142,6 +142,11 @@ Process {
                     $BackupFileName = -join($CurrentBootImageFileName, ".", (Get-Date -format "yyyyMMdd"), ".bak")
                     Copy-Item -Path $BootImagePath -Destination (Join-Path -Path $CurrentBootImageLocation -ChildPath $BackupFileName) -Force -ErrorAction Stop -Verbose:$false
                     Write-Verbose -Message "Successfully backed up existing Boot Image baseline file"
+
+                    # Validate mount folder exist, if not create it
+                    if (-not(Test-Path -Path $MountPath -PathType Container)) {
+
+                    }
 
                     try {
                         # Mount Boot Image to mount directory
