@@ -21,12 +21,18 @@
 .PARAMETER MountPath
     Specify the full path for a temporary mount location. Should be an existing empty folder.
 
+.PARAMETER RefreshPackage
+    Invoke a package source update of the affected Boot Image(s).
+
 .EXAMPLE
     # Apply a hotfix called 'windows10.0-kb4025632-x64.msu' to a Boot Image with PackageID 'P01000AB':
     .\Add-CMBootImageHotfix.ps1 -SiteServer CM01 -PackageID "P01000AB" -Path "C:\Temp\windows10.0-kb4025632-x64.msu" -MountPath "C:\Temp\Mount" -Verbose
 
     # Apply a hotfix called 'windows10.0-kb4025632-x64.msu' to multiple Boot Images with PackageID's 'P01000AB' and 'P01000BA':
     .\Add-CMBootImageHotfix.ps1 -SiteServer CM01 -PackageID "P01000AB", "P01000BA" -Path "C:\Temp\windows10.0-kb4025632-x64.msu" -MountPath "C:\Temp\Mount" -Verbose
+
+    # Apply a hotfix called 'windows10.0-kb4025632-x64.msu' to a Boot Image with PackageID 'P01000AB' and refresh the Boot Image package with the changes made:
+    .\Add-CMBootImageHotfix.ps1 -SiteServer CM01 -PackageID "P01000AB" -Path "C:\Temp\windows10.0-kb4025632-x64.msu" -MountPath "C:\Temp\Mount" -RefreshPackage -Verbose    
 
 .NOTES
     FileName:    Add-CMBootImageHotfix.ps1
@@ -91,7 +97,10 @@ param(
 		    }
 	    }
     })]
-    [string]$MountPath
+    [string]$MountPath,
+
+    [parameter(Mandatory=$false, HelpMessage="Invoke a package source update of the affected Boot Image(s).")]
+    [switch]$UpdatePackage
 )
 Begin {
     # Determine SiteCode from WMI
@@ -157,6 +166,18 @@ Process {
                             $DismountedImage = Dismount-WindowsImage -Path $MountPath -Save -ErrorAction Stop -Verbose:$false
                             if (($DismountedImage -ne $null) -and ($DismountedImage.GetType().FullName -eq "Microsoft.Dism.Commands.BaseDismObject")) {
                                 Write-Verbose -Message "Successfully dismounted the Boot Image from mount directory"
+                            }
+
+                            # Refresh package source (re-creates the Boot Image)
+                            if ($PSBoundParameters["RefreshPackage"]) {
+                                Write-Verbose -Message "Attempting to refresh the Boot Image package, this operation will take some time"
+                                $BootImagePackage.Get()
+                                $InvocationUpdatePackage = $BootImagePackage.RefreshPkgSource()
+
+                                # Validate return value from package update
+                                if ($InvocationUpdatePackage.ReturnValue -eq 0) {
+                                    Write-Verbose -Message "Successfully refreshed the Boot Image package"
+                                }
                             }
                         }
                         else {
