@@ -4,10 +4,7 @@
 
 .DESCRIPTION
     This script will apply a hotfix (.msu file) to any number of given Boot Images in Configuration identified by their PackageID property.
-    
-    When running this script, it's important that the Windows operating system the script is executed from has a version of DISM.exe that supports 
-    servicing the version of the Boot Images. Each Windows version has a corresponding Windows ADK release the Boot Images are created from. 
-    Remember that DISM.exe is backwards compatible.
+    For running this script, it's required to be executed on a Primary Site server where
 
 .PARAMETER SiteServer
     Site Server where the SMS Provider is installed.
@@ -120,8 +117,55 @@ Begin {
     catch {
         Write-Warning -Message "Unable to determine Site Code" ; break
     }
+
+    # Detect if Windows ADK is installed, and determine installation location
+    try {
+        $ADKInstallPath = Get-ItemProperty -Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots" -ErrorAction Stop | Select-Object -ExpandProperty KitsRoot*
+        $DeploymentToolsDISMPath = Join-Path -Path $ADKInstallPath -ChildPath "Assessment and Deployment Kit\Deployment Tools\amd64\DISM\dism.exe"
+    }
+    catch [System.Exception] {
+        Write-Warning -Message "Unable to detect Windows ADK installation location. Error message: $($_.Exception.Message)" ; break
+    }
 }
 Process {
+    # Functions
+    function Invoke-Executable {
+        param(
+            [parameter(Mandatory=$true, HelpMessage="Specify the file name or path of the executable to be invoked, including the extension")]
+            [ValidateNotNullOrEmpty()]
+            [string]$FilePath,
+
+            [parameter(Mandatory=$false, HelpMessage="Specify arguments that will be passed to the executable")]
+            [ValidateNotNull()]
+            [string]$Arguments
+        )
+
+        # Construct a hash-table for default parameter splatting
+        $SplatArgs = @{
+            FilePath = $FilePath
+            NoNewWindow = $true
+            Passthru = $true
+            ErrorAction = "Stop"
+        }
+
+        # Add ArgumentList param if present
+        if (-not([System.String]::IsNullOrEmpty($Arguments))) {
+            $SplatArgs.Add("ArgumentList", $Arguments)
+        }
+
+        # Invoke executable and wait for process to exit
+        try {
+            $Invocation = Start-Process @SplatArgs
+            $Handle = $Invocation.Handle
+            $Invocation.WaitForExit()
+        }
+        catch [System.Exception] {
+            Write-Warning -Message $_.Exception.Message ; break
+        }
+
+        return $Invocation.ExitCode
+    }
+
     # Process each passed PackageID object from parameter input
     foreach ($Package in $PackageID) {
         try {
@@ -156,10 +200,11 @@ Process {
                     try {
                         # Mount Boot Image to mount directory
                         Write-Verbose -Message "Attempting to mount '$($BootImagePackage.Name)' from: $($BootImagePath)"
-                        $MountedImage = Mount-WindowsImage -ImagePath $BootImagePath -Path $MountPath -Index 1 -ErrorAction Stop -Verbose:$false
-                        if (($MountedImage -ne $null) -and ($MountedImage.GetType().FullName -eq "Microsoft.Dism.Commands.ImageObject")) {
+
+                        $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Mount-Image /ImageFile:$($ImagePath) /Index:1 /MountDir:$($MountPath)"
+                        if ($ReturnValue -eq 0) {
                             Write-Verbose -Message "Successfully mounted '$($BootImagePackage.Name)'"
-                            
+
                             try {
                                 # Inject hotfix into offline image
                                 Write-Verbose -Message "Attempting to inject hotfix into Boot Image mount location: $($MountPath)"
@@ -173,8 +218,8 @@ Process {
                             }
 
                             # Dismount boot image
-                            $DismountedImage = Dismount-WindowsImage -Path $MountPath -Save -ErrorAction Stop -Verbose:$false
-                            if (($DismountedImage -ne $null) -and ($DismountedImage.GetType().FullName -eq "Microsoft.Dism.Commands.BaseDismObject")) {
+                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Unmount-Image /MountDir:$($MountPath) /Discard"
+                            if ($ReturnValue -eq 0) {
                                 Write-Verbose -Message "Successfully dismounted the Boot Image from mount directory"
                             }
 
