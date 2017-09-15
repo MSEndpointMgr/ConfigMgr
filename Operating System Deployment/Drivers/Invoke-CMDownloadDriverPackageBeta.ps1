@@ -76,8 +76,7 @@ Process {
 			[string]$FileName = "DriverPackageDownload.log"
 		)
 		# Determine log file location
-		#$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
-		$LogFilePath = Join-Path -Path C:\ -ChildPath $FileName
+		$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
 		
 		# Construct time stamp for log entry
 		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
