@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Download driver package (regular package) matching computer model, manufacturer and operating system.
 .DESCRIPTION
@@ -57,7 +57,7 @@ Begin {
 		$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Stop
 	}
 	catch [System.Exception] {
-		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"; exit 1
+		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"
 	}
 }
 Process {
@@ -76,7 +76,8 @@ Process {
 			[string]$FileName = "DriverPackageDownload.log"
 		)
 		# Determine log file location
-		$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
+		#$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
+		$LogFilePath = Join-Path -Path C:\ -ChildPath $FileName
 		
 		# Construct time stamp for log entry
 		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
@@ -115,12 +116,12 @@ Process {
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
 			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
 		}
 		"*Hewlett-Packard*" {
 			$ComputerManufacturer = "Hewlett-Packard"
 			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
 		}
 		"*Dell*" {
 			$ComputerManufacturer = "Dell"
@@ -154,7 +155,7 @@ Process {
 		$WebService = New-WebServiceProxy -Uri $URI -ErrorAction Stop
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3
 	}
 	
 	# Call web service for a list of packages
@@ -163,7 +164,7 @@ Process {
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3
 	}
 	
 	# Determine OS Image version for running task sequence from web service
@@ -187,7 +188,7 @@ Process {
 		Write-CMLogEntry -Value "Determined OS name from version: $($OSName)" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image version. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image version. Error message: $($_.Exception.Message)" -Severity 3
 	}
 	
 	# Determine OS Image architecture for running task sequence from web service
@@ -204,10 +205,10 @@ Process {
 				$OSImageArchitecture = "x86"
 			}
 		}
-		Write-CMLogEntry -Value "Translated OS Image architecture: $($OSName)" -Severity 1
+		Write-CMLogEntry -Value "Translated OS Image architecture: $($OSImageArchitecture)" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image architecture. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image architecture. Error message: $($_.Exception.Message)" -Severity 3
 	}
 	
 	# Validate operating system name was detected
@@ -218,8 +219,9 @@ Process {
 			# Process packages returned from web service
 			if ($Packages -ne $null) {
 				foreach ($Package in $Packages) {
+					
 					# Match model, manufacturer criteria
-					if (($Package.PackageName -match "\b$($ComputerModel)\b") -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+					if ((($Package.PackageName -match "\b$($ComputerModel)\b") -or ($Package.PackageDescription -match $SystemSKU)) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 						# Match operating system criteria per manufacturer for Windows 10 packages only
 						if ($OSName -like "Windows 10") {
 							switch ($ComputerManufacturer) {
@@ -244,7 +246,7 @@ Process {
 							if ($Package.PackageName -match $OSName) {
 								$MatchFound = $true
 							}
-						}	
+						}
 						# Match Microsoft Surface Models
 						if (($ComputerManufacturer -eq "Microsoft") -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and (($Package.PackageDescription.Split(":")[1]) -ne $null) -and ($Package.PackageName -match $OSName)) {
 							if (($Package.PackageDescription.Split(":")[1].TrimEnd(")")) -match $ComputerModel) {
@@ -257,8 +259,8 @@ Process {
 					elseif (($Package.PackageDescription -contains $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 						$MatchFound = $true
 					}
-					else{
-						$MatchFound = $false	
+					else {
+						$MatchFound = $false
 					}
 					
 					# Add package to list if match is found
@@ -281,7 +283,7 @@ Process {
 							Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($PackageList[0].PackageID)" -Severity 1
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3
 						}
 					}
 					elseif ($PackageList.Count -ge 2) {
@@ -289,9 +291,9 @@ Process {
 						
 						# Attempt to set task sequence variable
 						try {
-							if ($SystemSKU -ne $null) {
-								Write-CMLogEntry -Value "Attempting to match driver package based on system SKU: $SystemSKU" -Severity 1
-								$Package = ($PackageList | Where-Object { $_.PackageDescription -match $SystemSKU }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+							if ($ComputerManufacturer -eq "Hewlett-Packard") {
+								Write-CMLogEntry -Value "Attempting to match $ComputerManufacturer driver package based on OS build number $OSImageVersion" -Severity 1
+								$Package = ($PackageList | Where-Object { $_.PackageName -match $OSImageVersion }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 							}
 							else {
 								$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
@@ -300,26 +302,26 @@ Process {
 							Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($Package[0].PackageID)" -Severity 1
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3
 						}
 					}
 					else {
-						Write-CMLogEntry -Value "Unable to determine a matching driver package from list since an unsupported count was returned from package list, bailing out" -Severity 2; exit 1
+						Write-CMLogEntry -Value "Unable to determine a matching driver package from list since an unsupported count was returned from package list, bailing out" -Severity 2
 					}
 				}
 				else {
-					Write-CMLogEntry -Value "Empty driver package list detected, bailing out" -Severity 2; exit 1
+					Write-CMLogEntry -Value "Empty driver package list detected, bailing out" -Severity 2
 				}
 			}
 			else {
-				Write-CMLogEntry -Value "Driver package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 2; exit 1
+				Write-CMLogEntry -Value "Driver package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 2
 			}
 		}
 		else {
-			Write-CMLogEntry -Value "Unsupported computer platform detected, bailing out" -Severity 2; exit 1
+			Write-CMLogEntry -Value "Unsupported computer platform detected, bailing out" -Severity 2
 		}
 	}
 	else {
-		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference, bailing out" -Severity 2; exit 1
+		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference, bailing out" -Severity 2
 	}
 }
