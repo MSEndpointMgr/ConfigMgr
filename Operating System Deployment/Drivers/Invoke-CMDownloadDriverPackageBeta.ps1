@@ -37,7 +37,7 @@
     1.1.0 - (2017-08-29) Updated script to only check for the OS build version instead of major, minor, build and revision for HP systems.
                          $OSImageVersion will now only contain the most recent version if multiple OS images is referenced in the Task Sequence.
     1.1.1 - (2017-09-12) Updated script to match the system SKU for Dell, Lenovo and HP models. Added architecture check for matching packages.
-	1.1.2 - (2017-09-15) Rearranged detection to check SKU earlier
+    1.1.2 - (2017-09-15) Rearranged detection to check SKU earlier
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
