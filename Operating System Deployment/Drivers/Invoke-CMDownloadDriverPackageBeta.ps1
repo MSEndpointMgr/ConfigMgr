@@ -19,7 +19,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-	Updated:     2017-09-12
+	Updated:     2017-09-15
 	
 	Minimum required version of ConfigMgr WebService: 1.4.0
     
@@ -37,7 +37,7 @@
     1.1.0 - (2017-08-29) Updated script to only check for the OS build version instead of major, minor, build and revision for HP systems.
                          $OSImageVersion will now only contain the most recent version if multiple OS images is referenced in the Task Sequence.
     1.1.1 - (2017-09-12) Updated script to match the system SKU for Dell, Lenovo and HP models. Added architecture check for matching packages.
-	1.1.2 - (2017-09-14) Rearranged detection to check SKU earlier
+	1.1.2 - (2017-09-15) Rearranged detection to check SKU earlier
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -154,7 +154,7 @@ Process {
 		$WebService = New-WebServiceProxy -Uri $URI -ErrorAction Stop
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3
+		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Call web service for a list of packages
@@ -163,7 +163,7 @@ Process {
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Determine OS Image version for running task sequence from web service
@@ -187,7 +187,7 @@ Process {
 		Write-CMLogEntry -Value "Determined OS name from version: $($OSName)" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image version. Error message: $($_.Exception.Message)" -Severity 3
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image version. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Determine OS Image architecture for running task sequence from web service
@@ -207,7 +207,7 @@ Process {
 		Write-CMLogEntry -Value "Translated OS Image architecture: $($OSImageArchitecture)" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image architecture. Error message: $($_.Exception.Message)" -Severity 3
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image architecture. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Validate operating system name was detected
@@ -220,7 +220,7 @@ Process {
 				foreach ($Package in $Packages) {
 					
 					# Match model, manufacturer criteria
-					if ((($Package.PackageName -match "\b$($ComputerModel)\b") -or ($Package.PackageDescription -match $SystemSKU)) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+					if (($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 						# Match operating system criteria per manufacturer for Windows 10 packages only
 						if ($OSName -like "Windows 10") {
 							switch ($ComputerManufacturer) {
@@ -255,9 +255,6 @@ Process {
 							}
 						}
 					}
-					elseif (($Package.PackageDescription -contains $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
-						$MatchFound = $true
-					}
 					else {
 						$MatchFound = $false
 					}
@@ -282,7 +279,7 @@ Process {
 							Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($PackageList[0].PackageID)" -Severity 1
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3
+							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 						}
 					}
 					elseif ($PackageList.Count -ge 2) {
@@ -301,26 +298,26 @@ Process {
 							Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($Package[0].PackageID)" -Severity 1
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3
+							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 						}
 					}
 					else {
-						Write-CMLogEntry -Value "Unable to determine a matching driver package from list since an unsupported count was returned from package list, bailing out" -Severity 2
+						Write-CMLogEntry -Value "Unable to determine a matching driver package from list since an unsupported count was returned from package list, bailing out" -Severity 2; exit 1
 					}
 				}
 				else {
-					Write-CMLogEntry -Value "Empty driver package list detected, bailing out" -Severity 2
+					Write-CMLogEntry -Value "Empty driver package list detected, bailing out" -Severity 2; exit 1
 				}
 			}
 			else {
-				Write-CMLogEntry -Value "Driver package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 2
+				Write-CMLogEntry -Value "Driver package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 2; exit 1
 			}
 		}
 		else {
-			Write-CMLogEntry -Value "Unsupported computer platform detected, bailing out" -Severity 2
+			Write-CMLogEntry -Value "Unsupported computer platform detected, bailing out" -Severity 2; exit 1
 		}
 	}
 	else {
-		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference, bailing out" -Severity 2
+		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference, bailing out" -Severity 2; exit 1
 	}
 }
