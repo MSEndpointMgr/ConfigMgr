@@ -132,11 +132,6 @@ Process {
 			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
 			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 		}
-		"*Acer*" {
-			# Unconfirmed
-			$ComputerManufacturer = "Acer"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-		}
 	}
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	if (![string]::IsNullOrEmpty($SystemSKU)) {
