@@ -1,25 +1,37 @@
 <#
 .SYNOPSIS
-    Download driver package (regular package) matching computer model, manufacturer and operating system.
+	Download driver package (regular package) matching computer model, manufacturer and operating system.
+	
 .DESCRIPTION
     This script will determine the model of the computer, manufacturer and operating system being deployed and then query 
     the specified endpoint for ConfigMgr WebService for a list of Packages. It then sets the OSDDownloadDownloadPackages variable 
     to include the PackageID property of a package matching the computer model. If multiple packages are detect, it will select
-    most current one by the creation date of the packages.
+	most current one by the creation date of the packages.
+	
 .PARAMETER URI
-    Set the URI for the ConfigMgr WebService.
+	Set the URI for the ConfigMgr WebService.
+	
 .PARAMETER SecretKey
-    Specify the known secret key for the ConfigMgr WebService.
+	Specify the known secret key for the ConfigMgr WebService.
+	
 .PARAMETER Filter
-    Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
+	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
+
+.PARAMETER DestinationVariableName
+	Set a task sequence variable name used for referencing the location of the downloaded driver package content.
+
+.PARAMETER PackageContentDestination
+	Specify where the driver package content should be downloaded.
+
 .EXAMPLE
-    .\Invoke-CMDownloadDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
+	.\Invoke-CMDownloadDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
+	
 .NOTES
     FileName:    Invoke-CMDownloadDriverPackage.ps1
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-	Updated:     2017-09-15
+	Updated:     2017-09-18
 	
 	Minimum required version of ConfigMgr WebService: 1.4.0
     
@@ -34,22 +46,33 @@
     1.0.7 - (2017-05-26) Updated script to filter OS when multiple model matches are found for different OS platforms
     1.0.8 - (2017-06-26) Updated script with improved computer name matching when filtering out packages returned from the web service
     1.0.9 - (2017-08-25) Updated script to read package description for Microsoft models in order to match the WMI value contained within
-    1.1.0 - (2017-08-29) Updated script to only check for the OS build version instead of major, minor, build and revision for HP systems.
-						 $OSImageVersion will now only contain the most recent version if multiple OS images is referenced in the Task Sequence.
-	1.1.1 - (2017-09-12) Updated script to match the system SKU for Dell, Lenovo and HP models. Added architecture check for matching packages.
-	1.1.2 - (2017-09-15) Replaced computer model matching with SystemSKU. Added script with support for different exit codes.
+    1.1.0 - (2017-08-29) Updated script to only check for the OS build version instead of major, minor, build and revision for HP systems
+						 $OSImageVersion will now only contain the most recent version if multiple OS images is referenced in the Task Sequence
+	1.1.1 - (2017-09-12) Updated script to match the system SKU for Dell, Lenovo and HP models. Added architecture check for matching packages
+	1.1.2 - (2017-09-15) Replaced computer model matching with SystemSKU. Added script with support for different exit codes
+	1.1.3 - (2017-09-18) Added support for downloading package content instead of setting OSDDownloadDownloadPackages variable.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
 	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$URI,
+
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
+
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$Filter = [System.String]::Empty
+	[string]$Filter = ([System.String]::Empty),
+
+	[parameter(Mandatory = $false, HelpMessage = "Set a task sequence variable name used for referencing the location of the downloaded driver package content.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$DestinationVariableName = "DriverPackages",
+
+	[parameter(Mandatory = $false, HelpMessage = "Specify where the driver package content should be downloaded.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$PackageContentDestination = "%_SMSTSMDataPath%\DriverPackage"
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -67,10 +90,12 @@ Process {
 			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$Value,
+
 			[parameter(Mandatory = $true, HelpMessage = "Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("1", "2", "3")]
 			[string]$Severity,
+
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$FileName = "DriverPackageDownload.log"
@@ -97,6 +122,120 @@ Process {
 		catch [System.Exception] {
 			Write-Warning -Message "Unable to append log entry to DriverPackageDownload.log file. Error message: $($_.Exception.Message)"
 		}
+	}
+
+    function Invoke-Executable {
+        param(
+            [parameter(Mandatory=$true, HelpMessage="Specify the file name or path of the executable to be invoked, including the extension")]
+            [ValidateNotNullOrEmpty()]
+            [string]$FilePath,
+
+            [parameter(Mandatory=$false, HelpMessage="Specify arguments that will be passed to the executable")]
+            [ValidateNotNull()]
+            [string]$Arguments
+        )
+
+        # Construct a hash-table for default parameter splatting
+        $SplatArgs = @{
+            FilePath = $FilePath
+            NoNewWindow = $true
+            Passthru = $true
+            ErrorAction = "Stop"
+        }
+
+        # Add ArgumentList param if present
+        if (-not([System.String]::IsNullOrEmpty($Arguments))) {
+            $SplatArgs.Add("ArgumentList", $Arguments)
+        }
+
+        # Invoke executable and wait for process to exit
+        try {
+            $Invocation = Start-Process @SplatArgs
+            $Handle = $Invocation.Handle
+            $Invocation.WaitForExit()
+        }
+        catch [System.Exception] {
+            Write-Warning -Message $_.Exception.Message ; break
+        }
+
+        return $Invocation.ExitCode
+    }
+
+	function Invoke-CMDownloadContent {
+		param (
+			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
+			[Parameter(ParameterSetName = "CustomPath")]
+			[ValidateNotNullOrEmpty()]
+			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
+			[string]$PackageID,
+
+			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
+			[Parameter(ParameterSetName = "CustomPath")]
+			[ValidateNotNullOrEmpty()]
+			[ValidateSet("Custom", "TSCache", "CCMCache")]
+			[string]$DestinationLocationType,
+
+			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
+			[Parameter(ParameterSetName = "CustomPath")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DestinationVariableName,
+
+			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$CustomLocationPath
+		)
+		# Set OSDDownloadDownloadPackages
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDownloadPackages") = "$($PackageID)"
+
+		# Set OSDDownloadDestinationLocationType
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = "$($DestinationLocationType)"
+
+		# Set OSDDownloadDestinationVariable
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationVariable") = "$($DestinationVariableName)"
+
+		# Set OSDDownloadDestinationPath
+		if ($DestinationLocationType -like "Custom") {
+			Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
+			$TSEnvironment.Value("OSDDownloadDestinationPath") = "$($CustomLocationPath)"
+		}
+
+		# Invoke download of package content
+		try {
+			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
+			$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+
+			# Match on return code
+			if ($ReturnCode -eq 0) {
+				Write-CMLogEntry -Value "Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
+			}
+			else {
+				Write-CMLogEntry -Value "Package content download process failed with return code $($ReturnCode)" -Severity 2
+			}
+		}
+		catch [System.Exception] {
+			Write-CMLogEntry -Value "An error occured while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 12
+		}
+	}
+
+	function Invoke-CMResetDownloadContentVariables {
+		# Set OSDDownloadDownloadPackages
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDownloadPackages") = [System.String]::Empty
+
+		# Set OSDDownloadDestinationLocationType
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = [System.String]::Empty
+
+		# Set OSDDownloadDestinationVariable
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationVariable") = [System.String]::Empty
+
+		# Set OSDDownloadDestinationPath
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationPath") = [System.String]::Empty
 	}
 	
 	# Write log file for script execution
@@ -256,21 +395,20 @@ Process {
 				if ($PackageList -ne $null) {
 					# Determine the most current package from list
 					if ($PackageList.Count -eq 1) {
-						Write-CMLogEntry -Value "Driver package list contains a single match, attempting to set task sequence variable" -Severity 1
+						Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
 
-						# Attempt to set task sequence variable
+						# Attempt to download driver package content
 						try {
-							$TSEnvironment.Value("OSDDownloadDownloadPackages") = $($PackageList[0].PackageID)
-							Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($PackageList[0].PackageID)" -Severity 1
+							Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName $DestinationVariableName -CustomLocationPath $PackageContentDestination
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 5
+							Write-CMLogEntry -Value "An error occured while downloading driver package content (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 5
 						}
 					}
 					elseif ($PackageList.Count -ge 2) {
-						Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to set task sequence variable based up latest package creation date" -Severity 1
+						Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based up latest package creation date" -Severity 1
 						
-						# Attempt to set task sequence variable
+						# Attempt to download driver package content
 						try {
 							if ($ComputerManufacturer -eq "Hewlett-Packard") {
 								Write-CMLogEntry -Value "Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSImageVersion)" -Severity 1
@@ -279,11 +417,11 @@ Process {
 							else {
 								$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 							}
-							$TSEnvironment.Value("OSDDownloadDownloadPackages") = $($Package[0].PackageID)
-							Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID: $($Package[0].PackageID)" -Severity 1
+
+							Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName $DestinationVariableName -CustomLocationPath $PackageContentDestination
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable (multiple package matches). Error message: $($_.Exception.Message)" -Severity 3 ; exit 6
+							Write-CMLogEntry -Value "An error occured while downloading driver package content (multiple package matches). Error message: $($_.Exception.Message)" -Severity 3 ; exit 6
 						}
 					}
 					else {
@@ -305,4 +443,8 @@ Process {
 	else {
 		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference objects" -Severity 2 ; exit 11
 	}
+}
+End {
+	# Reset OSDDownloadContent.exe dependant variables for further use of the task sequence step
+	Invoke-CMResetDownloadContentVariables
 }
