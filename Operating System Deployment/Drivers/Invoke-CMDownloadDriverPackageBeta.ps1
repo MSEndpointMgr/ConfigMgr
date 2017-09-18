@@ -216,7 +216,7 @@ Process {
 			}
 		}
 		catch [System.Exception] {
-			Write-CMLogEntry -Value "An error occured while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 12
+			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 12
 		}
 	}
 
