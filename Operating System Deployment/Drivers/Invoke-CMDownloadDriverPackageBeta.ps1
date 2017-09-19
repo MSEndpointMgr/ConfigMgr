@@ -16,13 +16,10 @@
 	
 .PARAMETER Filter
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
-
 .PARAMETER DestinationVariableName
 	Set a task sequence variable name used for referencing the location of the downloaded driver package content.
-
 .PARAMETER PackageContentDestination
 	Specify where the driver package content should be downloaded.
-
 .EXAMPLE
 	.\Invoke-CMDownloadDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
 	
@@ -31,7 +28,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-	Updated:     2017-09-18
+	Updated:     2017-09-19
 	
 	Minimum required version of ConfigMgr WebService: 1.4.0
     
@@ -51,6 +48,7 @@
 	1.1.1 - (2017-09-12) Updated script to match the system SKU for Dell, Lenovo and HP models. Added architecture check for matching packages
 	1.1.2 - (2017-09-15) Replaced computer model matching with SystemSKU. Added script with support for different exit codes
 	1.1.3 - (2017-09-18) Added support for downloading package content instead of setting OSDDownloadDownloadPackages variable.
+	1.1.4 - (2017-09-19) Added support for installing driver package instead of running a seperate DISM command line step.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -400,6 +398,7 @@ Process {
 						# Attempt to download driver package content
 						try {
 							Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName $DestinationVariableName -CustomLocationPath $PackageContentDestination
+							Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$(Join-Path $TSEnvironment.Value('_SMSTSMDataPath') 'DriverPackage') /Recurse"
 						}
 						catch [System.Exception] {
 							Write-CMLogEntry -Value "An error occured while downloading driver package content (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 5
@@ -417,8 +416,8 @@ Process {
 							else {
 								$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 							}
-
 							Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName $DestinationVariableName -CustomLocationPath $PackageContentDestination
+							Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$(Join-Path $TSEnvironment.Value('_SMSTSMDataPath') 'DriverPackage') /Recurse"
 						}
 						catch [System.Exception] {
 							Write-CMLogEntry -Value "An error occured while downloading driver package content (multiple package matches). Error message: $($_.Exception.Message)" -Severity 3 ; exit 6
