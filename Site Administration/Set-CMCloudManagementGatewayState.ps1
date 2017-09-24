@@ -1,15 +1,18 @@
 <#
 .SYNOPSIS
-    Set service state for a Cloud Management Gateway resource in Configuration Manager.
+    Set service state for a specific or multiple Cloud Management Gateway resources in Configuration Manager.
 
 .DESCRIPTION
-    This script can either start or stop a Cloud Management Gateway resource in Configuration Manager.
+    This script can either start or stop a single or multiple Cloud Management Gateway resources in Configuration Manager.
 
 .PARAMETER SiteServer
     Site server name with SMS Provider installed.
 
-.PARAMETER ShowProgress
-    Show a progressbar displaying the current operation.
+.PARAMETER CloudServiceName
+    Specify the a single or multiple Cloud Management Gateway service names, e,g, contosocmg.cloudapp.net.
+
+.PARAMETER ServiceState
+    Specify the desired Cloud Management Gateway service state.
 
 .EXAMPLE
     # Start the Cloud Management Gateway with a cloud service name of 'ContosoCMG.cloudapp.net':
@@ -35,11 +38,11 @@ param(
     [ValidateScript({Test-Connection -ComputerName $_ -Count 1 -Quiet})]
     [string]$SiteServer,
 
-    [parameter(Mandatory=$true, HelpMessage="Specify the Cloud Management Gateway service name, e,g, contosocmg.cloudapp.net.")]
+    [parameter(Mandatory=$true, HelpMessage="Specify the a single or multiple Cloud Management Gateway service names, e,g, contosocmg.cloudapp.net.")]
     [ValidateNotNullOrEmpty()]
-    [string]$CloudServiceName,    
+    [string[]]$CloudServiceName,
 
-    [parameter(Mandatory=$true, HelpMessage="Specify the Cloud Management Gateway service state.")]
+    [parameter(Mandatory=$true, HelpMessage="Specify the desired Cloud Management Gateway service state.")]
     [ValidateNotNullOrEmpty()]
     [ValidateSet("Start", "Stop")]
     [string]$ServiceState
@@ -104,44 +107,49 @@ Begin {
     }
 }
 Process {
-    # Get Cloud Management Gateway resource object
-    try {
-        Write-Verbose -Message "Attempting to retrieve Cloud Management Gateway resource with service name '$($CloudServiceName)'"
-        $CloudManagementGateway = Get-CMCloudManagementGateway -Name $CloudServiceName -ErrorAction Stop -Verbose:$false
-    }
-    catch [System.Exception] {
-        Write-Warning -Message "Unable to retrieve Cloud Management Gateway resource. Error message: $($_.Exception.Message)"
-    }
-
-    if ($CloudManagementGateway -ne $null) {
+    foreach ($CloudServiceResource in $CloudServiceName) {
+        # Get Cloud Management Gateway resource object
         try {
-            switch ($ServiceState) {
-                "Start" {
-                    if ($CloudManagementGateway.State -eq 6) {
-                        Write-Verbose -Message "Attempting to start Cloud Management Gateway resource '$($CloudServiceName)'"
-                        $Invocation = Start-CMCloudManagementGateway -InputObject $CloudManagementGateway -ErrorAction Stop -Verbose:$false
+            Write-Verbose -Message "Attempting to retrieve Cloud Management Gateway resource with service name '$($CloudServiceResource)'"
+            $CloudManagementGateway = Get-CMCloudManagementGateway -Name $CloudServiceResource -ErrorAction Stop -Verbose:$false
+            Write-Verbose -Message "Successfully located the targeted Cloud Management Gateway resource"
+        }
+        catch [System.Exception] {
+            Write-Warning -Message "Unable to retrieve the targeted Cloud Management Gateway resource. Error message: $($_.Exception.Message)"
+        }
+
+        if ($CloudManagementGateway -ne $null) {
+            try {
+                switch ($ServiceState) {
+                    "Start" {
+                        if ($CloudManagementGateway.State -eq 6) {
+                            Write-Verbose -Message "Attempting to start Cloud Management Gateway resource '$($CloudManagementGateway.Name)'"
+                            $Invocation = Start-CMCloudManagementGateway -InputObject $CloudManagementGateway -ErrorAction Stop -Verbose:$false
+                            Write-Verbose -Message "Cloud Management Gateway is now starting, allow some time for this operation to complete"
+                        }
+                        else {
+                            Write-Verbose -Message "Cloud Management Gateway is currently in the '$($StateTable[[int]$CloudManagementGateway.State])', will not attempt to start resource"
+                        }
                     }
-                    else {
-                        Write-Verbose -Message "Cloud Management Gateway is currently in the '$($StateTable[[int]$CloudManagementGateway.State])', will not attempt to start resource"
-                    }
-                }
-                "Stop" {
-                    if ($CloudManagementGateway.State -eq 0) {
-                        Write-Verbose -Message "Attempting to stop Cloud Management Gateway resource '$($CloudServiceName)'"
-                        $Invocation = Stop-CMCloudManagementGateway -InputObject $CloudManagementGateway -ErrorAction Stop -Verbose:$false
-                    }
-                    else {
-                        Write-Verbose -Message "Cloud Management Gateway is currently in the '$($StateTable[[int]$CloudManagementGateway.State])', will not attempt to start resource"
+                    "Stop" {
+                        if ($CloudManagementGateway.State -eq 0) {
+                            Write-Verbose -Message "Attempting to stop Cloud Management Gateway resource '$($CloudManagementGateway.Name)'"
+                            $Invocation = Stop-CMCloudManagementGateway -InputObject $CloudManagementGateway -ErrorAction Stop -Verbose:$false
+                            Write-Verbose -Message "Cloud Management Gateway is now shutting down, allow some time for this operation to complete"
+                        }
+                        else {
+                            Write-Verbose -Message "Cloud Management Gateway is currently in the '$($StateTable[[int]$CloudManagementGateway.State])', will not attempt to start resource"
+                        }
                     }
                 }
             }
+            catch [System.Exception] {
+                Write-Warning -Message "Unable to retrieve Cloud Management Gateway resource. Error message: $($_.Exception.Message)" ; break
+            }
         }
-        catch [System.Exception] {
-            Write-Warning -Message "Unable to retrieve Cloud Management Gateway resource. Error message: $($_.Exception.Message)" ; break
+        else {
+            Write-Warning -Message "Unable to retrieve Cloud Management Gateway resource, please enter a valid Cloud Service Name"
         }
-    }
-    else {
-        Write-Warning -Message "Unable to retrieve Cloud Management Gateway resource, please enter a valid Cloud Service Name"
     }
 }
 End {
