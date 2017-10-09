@@ -3,8 +3,8 @@
     Detect and download Language Pack package matching a specific Windows 10 version.
 
 .DESCRIPTION
-    This script will detect current installed Language Packs, query the specified endpoint for ConfigMgr WebService for a list of Packages and set 
-    OSDDownloadDownloadPackages variable to include the PackageID property of packages matching a specific Windows 10 version.
+    This script will detect current installed Language Packs, query the specified endpoint for ConfigMgr WebService for a list of Packages and download
+    these packages matching a specific Windows 10 version.
 
 .PARAMETER URI
     Set the URI for the ConfigMgr WebService.
@@ -29,10 +29,11 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2017-07-22
-    Updated:     2017-07-22
+    Updated:     2017-10-09
     
     Version history:
     1.0.0 - (2017-07-22) Script created
+    1.0.1 - (2017-10-09) - Added functionality to download the detected language packs
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -107,6 +108,85 @@ Process {
         }
     }
 
+	function Invoke-CMDownloadContent {
+		param (
+			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
+			[Parameter(ParameterSetName = "CustomPath")]
+			[ValidateNotNullOrEmpty()]
+			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
+			[string]$PackageID,
+
+			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
+			[Parameter(ParameterSetName = "CustomPath")]
+			[ValidateNotNullOrEmpty()]
+			[ValidateSet("Custom", "TSCache", "CCMCache")]
+			[string]$DestinationLocationType,
+
+			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
+			[Parameter(ParameterSetName = "CustomPath")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DestinationVariableName,
+
+			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$CustomLocationPath
+		)
+		# Set OSDDownloadDownloadPackages
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDownloadPackages") = "$($PackageID)"
+
+		# Set OSDDownloadDestinationLocationType
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = "$($DestinationLocationType)"
+
+		# Set OSDDownloadDestinationVariable
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationVariable") = "$($DestinationVariableName)"
+
+		# Set OSDDownloadDestinationPath
+		if ($DestinationLocationType -like "Custom") {
+			Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
+			$TSEnvironment.Value("OSDDownloadDestinationPath") = "$($CustomLocationPath)"
+		}
+
+		# Invoke download of package content
+		try {
+			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
+			$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+
+			# Match on return code
+			if ($ReturnCode -eq 0) {
+				Write-CMLogEntry -Value "Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
+			}
+			else {
+				Write-CMLogEntry -Value "Package content download process failed with return code $($ReturnCode)" -Severity 2
+			}
+		}
+		catch [System.Exception] {
+			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 12
+		}
+
+		return $ReturnCode
+    }
+    
+	function Invoke-CMResetDownloadContentVariables {
+		# Set OSDDownloadDownloadPackages
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDownloadPackages") = [System.String]::Empty
+
+		# Set OSDDownloadDestinationLocationType
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = [System.String]::Empty
+
+		# Set OSDDownloadDestinationVariable
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationVariable") = [System.String]::Empty
+
+		# Set OSDDownloadDestinationPath
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
+		$TSEnvironment.Value("OSDDownloadDestinationPath") = [System.String]::Empty
+	}    
+
     # Write log file for script execution
     Write-CMLogEntry -Value "Language Pack download process initiated" -Severity 1
 
@@ -158,13 +238,15 @@ Process {
             # Build package id list for task sequence variable
             $PackageIDs = $PackageList.PackageID -join ","
 
-            # Attempt to set task sequence variable
-            try {
-                $TSEnvironment.Value("OSDDownloadDownloadPackages") = "$($PackageIDs)"
-                Write-CMLogEntry -Value "Successfully set OSDDownloadDownloadPackages variable with PackageID's: $($PackageIDs)" -Severity 1
+            # Attempt to download language pack package content
+            Write-CMLogEntry -Value "Attempting to download language pack package content" -Severity 1
+            $DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageIDs -DestinationLocationType Custom -DestinationVariableName "OSDLanguagePack" -CustomLocationPath "%_SMSTSMDataPath%\LanguagePack"
+
+            if ($DownloadInvocation -eq 0) {
+                Write-CMLogEntry -Value "Language pack package content downloaded successfully" -Severity 1
             }
-            catch [System.Exception] {
-                Write-CMLogEntry -Value "An error occured while setting OSDDownloadDownloadPackages variable. Error message: $($_.Exception.Message)" -Severity 3 ; exit 1
+            else {
+                Write-CMLogEntry -Value "Language pack package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 1
             }
         }
         else {
@@ -174,4 +256,8 @@ Process {
     else {
         Write-CMLogEntry -Value "Current Windows installation only contains a single language, no need to download addition language packs" -Severity 1
     }
+}
+End {
+	# Reset OSDDownloadContent.exe dependant variables for further use of the task sequence step
+	Invoke-CMResetDownloadContentVariables
 }
