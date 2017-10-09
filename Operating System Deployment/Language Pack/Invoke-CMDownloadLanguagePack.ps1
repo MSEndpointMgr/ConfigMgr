@@ -29,11 +29,11 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2017-07-22
-    Updated:     2017-10-09
+    Updated:     2017-10-08
     
     Version history:
     1.0.0 - (2017-07-22) Script created
-    1.0.1 - (2017-10-09) - Added functionality to download the detected language packs
+    1.0.1 - (2017-10-08) - Added functionality to download the detected language packs
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
