@@ -31,7 +31,7 @@
     1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models (Maurice Daly)
     1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models (Maurice Daly)
     1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
-	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable
+	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable (Maurice Daly)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -394,7 +394,7 @@ Process {
 							}
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
+							Write-CMLogEntry -Value "An error occurred while downloading BIOS update (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
 						}
 					}
 					else {
@@ -452,7 +452,7 @@ Process {
 								}
 							}
 							catch [System.Exception] {
-								Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
+								Write-CMLogEntry -Value "An error occurred while applying BIOS update (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
 							}	
 						}
 						else {
