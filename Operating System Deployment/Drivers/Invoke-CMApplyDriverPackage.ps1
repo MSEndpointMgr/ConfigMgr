@@ -25,7 +25,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-	Updated:     2017-09-19
+	Updated:     2017-10-12
 	
 	Minimum required version of ConfigMgr WebService: 1.4.0
     
@@ -46,28 +46,30 @@
 	1.1.2 - (2017-09-15) Replaced computer model matching with SystemSKU. Added script with support for different exit codes
 	1.1.3 - (2017-09-18) Added support for downloading package content instead of setting OSDDownloadDownloadPackages variable.
 	1.1.4 - (2017-09-19) Added support for installing driver package directly from this script instead of running a seperate DISM command line step.
+	1.1.5 - (2017-10-12) Added support for in full OS driver maintaince updates
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
 	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$URI,
-
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
-
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$Filter = ([System.String]::Empty)
+	[string]$Filter = ([System.String]::Empty),
+	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used as part of an in-OS maintenance task")]
+	[ValidateSet($false, $true)]
+	[string]$OSMaintenance = $false
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
-		$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Stop
+		$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
 	}
 	catch [System.Exception] {
-		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object" ; break
+		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"; break
 	}
 }
 Process {
@@ -77,12 +79,10 @@ Process {
 			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$Value,
-
 			[parameter(Mandatory = $true, HelpMessage = "Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("1", "2", "3")]
 			[string]$Severity,
-
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$FileName = "ApplyDriverPackage.log"
@@ -110,44 +110,43 @@ Process {
 			Write-Warning -Message "Unable to append log entry to ApplyDriverPackage.log file. Error message: $($_.Exception.Message)"
 		}
 	}
-
-    function Invoke-Executable {
-        param(
-            [parameter(Mandatory=$true, HelpMessage="Specify the file name or path of the executable to be invoked, including the extension")]
-            [ValidateNotNullOrEmpty()]
-            [string]$FilePath,
-
-            [parameter(Mandatory=$false, HelpMessage="Specify arguments that will be passed to the executable")]
-            [ValidateNotNull()]
-            [string]$Arguments
-        )
-
-        # Construct a hash-table for default parameter splatting
-        $SplatArgs = @{
-            FilePath = $FilePath
-            NoNewWindow = $true
-            Passthru = $true
-            ErrorAction = "Stop"
-        }
-
-        # Add ArgumentList param if present
-        if (-not([System.String]::IsNullOrEmpty($Arguments))) {
-            $SplatArgs.Add("ArgumentList", $Arguments)
-        }
-
-        # Invoke executable and wait for process to exit
-        try {
-            $Invocation = Start-Process @SplatArgs
-            $Handle = $Invocation.Handle
-            $Invocation.WaitForExit()
-        }
-        catch [System.Exception] {
-            Write-Warning -Message $_.Exception.Message ; break
-        }
-
-        return $Invocation.ExitCode
-    }
-
+	
+	function Invoke-Executable {
+		param (
+			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
+			[ValidateNotNullOrEmpty()]
+			[string]$FilePath,
+			[parameter(Mandatory = $false, HelpMessage = "Specify arguments that will be passed to the executable")]
+			[ValidateNotNull()]
+			[string]$Arguments
+		)
+		
+		# Construct a hash-table for default parameter splatting
+		$SplatArgs = @{
+			FilePath	 = $FilePath
+			NoNewWindow  = $true
+			Passthru	 = $true
+			ErrorAction  = "Stop"
+		}
+		
+		# Add ArgumentList param if present
+		if (-not ([System.String]::IsNullOrEmpty($Arguments))) {
+			$SplatArgs.Add("ArgumentList", $Arguments)
+		}
+		
+		# Invoke executable and wait for process to exit
+		try {
+			$Invocation = Start-Process @SplatArgs
+			$Handle = $Invocation.Handle
+			$Invocation.WaitForExit()
+		}
+		catch [System.Exception] {
+			Write-Warning -Message $_.Exception.Message; break
+		}
+		
+		return $Invocation.ExitCode
+	}
+	
 	function Invoke-CMDownloadContent {
 		param (
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
@@ -155,18 +154,15 @@ Process {
 			[ValidateNotNullOrEmpty()]
 			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
 			[string]$PackageID,
-
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("Custom", "TSCache", "CCMCache")]
 			[string]$DestinationLocationType,
-
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[string]$DestinationVariableName,
-
 			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$CustomLocationPath
@@ -174,26 +170,26 @@ Process {
 		# Set OSDDownloadDownloadPackages
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDownloadPackages") = "$($PackageID)"
-
+		
 		# Set OSDDownloadDestinationLocationType
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = "$($DestinationLocationType)"
-
+		
 		# Set OSDDownloadDestinationVariable
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationVariable") = "$($DestinationVariableName)"
-
+		
 		# Set OSDDownloadDestinationPath
 		if ($DestinationLocationType -like "Custom") {
 			Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
 			$TSEnvironment.Value("OSDDownloadDestinationPath") = "$($CustomLocationPath)"
 		}
-
+		
 		# Invoke download of package content
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
 			$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
-
+			
 			# Match on return code
 			if ($ReturnCode -eq 0) {
 				Write-CMLogEntry -Value "Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
@@ -203,28 +199,50 @@ Process {
 			}
 		}
 		catch [System.Exception] {
-			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 12
+			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3; exit 12
 		}
-
+		
 		return $ReturnCode
 	}
-
+	
 	function Invoke-CMResetDownloadContentVariables {
 		# Set OSDDownloadDownloadPackages
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDownloadPackages") = [System.String]::Empty
-
+		
 		# Set OSDDownloadDestinationLocationType
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = [System.String]::Empty
-
+		
 		# Set OSDDownloadDestinationVariable
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationVariable") = [System.String]::Empty
-
+		
 		# Set OSDDownloadDestinationPath
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationPath") = [System.String]::Empty
+	}
+	
+	function Return-OSName{
+		param (
+			[parameter(Mandatory = $true, HelpMessage = "Windows build version must be provided")]
+			[ValidateNotNullOrEmpty()]
+			[string]$OSImageVersion
+		)
+		
+		# Get operating system name from version
+		switch -Wildcard ($OSImageVersion) {
+			"10.0*" {
+				$OSName = "Windows 10"
+			}
+			"6.3*" {
+				$OSName = "Windows 8.1"
+			}
+			"6.1*" {
+				$OSName = "Windows 7"
+			}
+		}
+		Return $OSName
 	}
 	
 	# Write log file for script execution
@@ -262,7 +280,7 @@ Process {
 		}
 	}
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
-	if (-not[string]::IsNullOrEmpty($SystemSKU)) {
+	if (-not [string]::IsNullOrEmpty($SystemSKU)) {
 		Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
 	}
 	
@@ -277,7 +295,7 @@ Process {
 		$WebService = New-WebServiceProxy -Uri $URI -ErrorAction Stop
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3 ; exit 1
+		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Call web service for a list of packages
@@ -286,51 +304,60 @@ Process {
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3 ; exit 2
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 2
 	}
 	
-	# Determine OS Image version for running task sequence from web service
-	try {
-		$TSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
-		$OSImageVersion = $WebService.GetCMOSImageVersionForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
-		Write-CMLogEntry -Value "Retrieved OS Image version from web service: $($OSImageVersion)" -Severity 1
+	if ($OSMaintenance -eq $false) {
+		#Determine OS Image version for running task sequence from web service
+		Write-CMLogEntry -Value "Script is running in OS deployment phase" -Severity 1
+		try {
+			$TSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
+			$OSImageVersion = $WebService.GetCMOSImageVersionForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
+			Write-CMLogEntry -Value "Retrieved OS Image version from web service: $($OSImageVersion)" -Severity 1
+			
+			# Get operating system name from version
+			$OSName = Return-OSName -OSImageVersion $OSImageVersion
+			
+			Write-CMLogEntry -Value "Determined OS name from version: $($OSName)" -Severity 1
+		}
+		catch [System.Exception] {
+			Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image version. Error message: $($_.Exception.Message)" -Severity 3; exit 3
+		}
+		
+		# Determine OS Image architecture for running task sequence from web service
+		try {
+			$OSImageArchitecture = $WebService.GetCMOSImageArchitectureForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
+			Write-CMLogEntry -Value "Retrieved OS Image architecture from web service: $($OSImageArchitecture)" -Severity 1
+			
+			# Translate operating system architecture from web service response
+			switch ($OSImageArchitecture) {
+				"9" {
+					$OSImageArchitecture = "x64"
+				}
+				"0" {
+					$OSImageArchitecture = "x86"
+				}
+			}
+			Write-CMLogEntry -Value "Translated OS Image architecture: $($OSImageArchitecture)" -Severity 1
+		}
+		catch [System.Exception] {
+			Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image architecture. Error message: $($_.Exception.Message)" -Severity 3; exit 4
+		}
+	}
+	else {
+		Write-CMLogEntry -Value "Script is running in OS maintenance mode" -Severity 1
+		$OSImageVersion = ((Get-Item -Path C:\Windows\System32\ntdll.dll | Select -ExpandProperty VersionInfo).ProductVersion)
 		
 		# Get operating system name from version
-		switch -Wildcard ($OSImageVersion) {
-			"10.0*" {
-				$OSName = "Windows 10"
-			}
-			"6.3*" {
-				$OSName = "Windows 8.1"
-			}
-			"6.1*" {
-				$OSName = "Windows 7"
-			}
-		}
+		$OSName = Return-OSName -OSImageVersion $OSImageVersion
 		Write-CMLogEntry -Value "Determined OS name from version: $($OSName)" -Severity 1
-	}
-	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image version. Error message: $($_.Exception.Message)" -Severity 3 ; exit 3
-	}
-	
-	# Determine OS Image architecture for running task sequence from web service
-	try {
-		$OSImageArchitecture = $WebService.GetCMOSImageArchitectureForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
-		Write-CMLogEntry -Value "Retrieved OS Image architecture from web service: $($OSImageArchitecture)" -Severity 1
 		
-		# Translate operating system architecture from web service response
-		switch ($OSImageArchitecture) {
-			"9" {
-				$OSImageArchitecture = "x64"
-			}
-			"0" {
-				$OSImageArchitecture = "x86"
-			}
+		if ((Test-Path -Path "C:\Program Files (x86)") -eq $true) {
+			$OSImageArchitecture = "x64"
 		}
-		Write-CMLogEntry -Value "Translated OS Image architecture: $($OSImageArchitecture)" -Severity 1
-	}
-	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to determine OS Image architecture. Error message: $($_.Exception.Message)" -Severity 3 ; exit 4
+		else {
+			$OSImageArchitecture = "x86"
+		}
 	}
 	
 	# Validate operating system name was detected
@@ -388,93 +415,97 @@ Process {
 							# Attempt to download driver package content
 							Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-
+		
 							try {
-								# Apply drivers recursively from downloaded driver package location
 								if ($DownloadInvocation -eq 0) {
-									Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
-									$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
-
-									# Validate driver injection
-									if ($ApplyDriverInvocation -eq 0) {
-										Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
-									}
-									else {
-										Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Exit code: $($ApplyDriverInvocation)" -Severity 3 ; exit 14
+									if ($OSMaintenance -eq $false) {
+										# Apply drivers recursively from downloaded driver package location
+										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
+										$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
+										# Validate driver injection
+										if ($ApplyDriverInvocation -eq 0) {
+											Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
+										}
+										else {
+											Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Exit code: $($ApplyDriverInvocation)" -Severity 3; exit 14
+										}
 									}
 								}
 								else {
-									Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
+									Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
 								}
 							}
 							catch [System.Exception] {
-								Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
+								Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Error message: $($_.Exception.Message)" -Severity 3; exit 14
 							}
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occurred while downloading driver package content (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 5
+							Write-CMLogEntry -Value "An error occurred while downloading driver package content (single package match). Error message: $($_.Exception.Message)" -Severity 3; exit 5
 						}
 					}
 					elseif ($PackageList.Count -ge 2) {
 						try {
 							Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based up latest package creation date" -Severity 1
-
+							
 							# Determine matching driver package from array list with vendor specific solutions
 							if ($ComputerManufacturer -eq "Hewlett-Packard") {
 								Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSImageVersion)" -Severity 1
-								$Package = ($PackageList | Where-Object { $_.PackageName -match $OSImageVersion }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+								$Package = ($PackageList | Where-Object {
+										$_.PackageName -match $OSImageVersion
+									}) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 							}
 							else {
 								$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 							}
-
+							
 							# Attempt to download driver package content
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-
+							
 							try {
-								# Apply drivers recursively from downloaded driver package location
 								if ($DownloadInvocation -eq 0) {
-									Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
-									$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
-
-									# Validate driver injection
-									if ($ApplyDriverInvocation -eq 0) {
-										Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
+									if ($OSMaintenance -eq $false) {
+										# Apply drivers recursively from downloaded driver package location
+										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
+										$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
+										# Validate driver injection
+										if ($ApplyDriverInvocation -eq 0) {
+											Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
+										}
+										else {
+											Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Exit code: $($ApplyDriverInvocation)" -Severity 3; exit 15
+										}
 									}
-									else {
-										Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Exit code: $($ApplyDriverInvocation)" -Severity 3 ; exit 15
-									}									
 								}
 								else {
-									Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
+									Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
 								}
 							}
 							catch [System.Exception] {
-								Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
-							}							
+								Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message: $($_.Exception.Message)" -Severity 3; exit 15
+							}
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occurred while downloading driver package content (multiple package matches). Error message: $($_.Exception.Message)" -Severity 3 ; exit 6
+							Write-CMLogEntry -Value "An error occurred while downloading driver package content (multiple package matches). Error message: $($_.Exception.Message)" -Severity 3; exit 6
 						}
 					}
 					else {
-						Write-CMLogEntry -Value "Unable to determine a matching driver package from package list array, unhandled amount of matches" -Severity 2 ; exit 7
+						Write-CMLogEntry -Value "Unable to determine a matching driver package from package list array, unhandled amount of matches" -Severity 2; exit 7
 					}
 				}
 				else {
-					Write-CMLogEntry -Value "Empty driver package list detected, unable to determine matching driver package" -Severity 2 ; exit 8
+					Write-CMLogEntry -Value "Empty driver package list detected, unable to determine matching driver package" -Severity 2; exit 8
 				}
 			}
 			else {
-				Write-CMLogEntry -Value "Call to web service for package objects returned empty" -Severity 2 ; exit 9
+				Write-CMLogEntry -Value "Call to web service for package objects returned empty" -Severity 2; exit 9
 			}
 		}
 		else {
-			Write-CMLogEntry -Value "Unsupported computer platform detected, virtual machines are not supported" -Severity 2 ; exit 10
+			Write-CMLogEntry -Value "Unsupported computer platform detected, virtual machines are not supported" -Severity 2; exit 10
 		}
 	}
 	else {
-		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference objects" -Severity 2 ; exit 11
+		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference objects" -Severity 2; exit 11
 	}
 }
 End {
