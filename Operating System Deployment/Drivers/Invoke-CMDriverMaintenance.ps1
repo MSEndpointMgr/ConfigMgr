@@ -60,7 +60,7 @@ function Write-CMLogEntry {
 try {
 	Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
 	Get-ChildItem -Path "C:\_SMSTaskSequence\DriverPackage" -Filter *.inf -Recurse | ForEach-Object {
-		pnputil /add-driver $_.FullName /install /subdirs
+		pnputil /add-driver $_.FullName /install
 	} | Out-File -FilePath C:\Windows\Temp\DriverMaintenance.log -Force
 	Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
 	exit 0
