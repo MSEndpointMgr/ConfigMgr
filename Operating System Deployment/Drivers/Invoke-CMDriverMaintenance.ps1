@@ -32,7 +32,6 @@ function Write-CMLogEntry {
 		[string]$FileName = "ApplyDriverMaintenancePackage.log"
 	)
 	# Determine log file location
-	#$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
 	$LogFilePath = Join-Path -Path C:\Windows\Temp -ChildPath $FileName
 	
 	# Construct time stamp for log entry
@@ -63,9 +62,7 @@ try {
 		pnputil /add-driver $_.FullName /install
 	} | Out-File -FilePath C:\Windows\Temp\DriverMaintenance.log -Force
 	Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
-	exit 0
 }
 catch [System.Exception] {
 	Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3
-	exit 1
 }
