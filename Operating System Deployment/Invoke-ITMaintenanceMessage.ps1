@@ -78,7 +78,8 @@ function Update-RegistryValue {
 	}
 	elseif ($Action -eq "Restore") {
 		if ((Test-Path -Path $BackupFile) -eq $true) {
-			Set-ItemProperty -Path $RegistryKey -Name $RegistryItem -Value $(Get-Content -Path $BackupFile)
+			$Notice = [string]::join([environment]::newline, (get-content -path $BackupFile))
+			Set-ItemProperty -Path $RegistryKey -Name $RegistryItem -Value $Notice
 		}
 		else {
 			Set-ItemProperty -Path $RegistryKey -Name $RegistryItem -Value $null
