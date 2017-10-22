@@ -34,7 +34,7 @@ $CurrentLegalNotice = (Get-Item -Path $LegalRegNoticePath | Get-ItemProperty).Le
 $CurrentLegalCaption = (Get-Item -Path $LegalRegNoticePath | Get-ItemProperty).LegalNoticeCaption
 $CurrentLockScreenImage = (Get-Item -Path $PersonalizationRegPath| Get-ItemProperty).LockScreenImage
 $LegalCaptionBackupFile = "LegalCaptionBackup.txt"
-$LegalNoticeBackupFile = "LegalImageBackup.txt"
+$LegalNoticeBackupFile = "LegalNoticeBackup.txt"
 $LockScreenBackupFile = "LockScreenBackup.txt"
 
 function Get-ScriptDirectory {
@@ -74,7 +74,7 @@ function Update-RegistryValue {
 	)
 	
 	if ($Action -eq "Backup") {
-		$RegistryValue | Out-File -FilePath $BackupFile -Force
+		$RegistryValue | Out-File -Encoding ASCII -FilePath $BackupFile -Force
 	}
 	elseif ($Action -eq "Restore") {
 		if ((Test-Path -Path $BackupFile) -eq $true) {
