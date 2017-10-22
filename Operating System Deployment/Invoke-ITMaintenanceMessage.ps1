@@ -35,13 +35,12 @@ $LockScreenBackupFile = "LockScreenBackup.txt"
 function Get-ScriptDirectory {
 	[OutputType([string])]
 	param ()
-	<#if ($null -ne $hostinvocation) {
+	if ($null -ne $hostinvocation) {
 		Split-Path $hostinvocation.MyCommand.path
 	}
 	else {
 		Split-Path $script:MyInvocation.MyCommand.Path
-	}#>
-	Write-Output "C:\Users\maurice.daly\Desktop"
+	}
 }
 
 function Update-RegistryValue {
