@@ -3,8 +3,13 @@
 	IT Maintenance notice for task sequence maintenance deployments
 	
 .DESCRIPTION
-    This script will replace the windows lock screen background and legal notices
-	to advise of IT maintenance taking place. 
+	The script updates the background, legal notice and legal caption for IT maintenance work. 
+	Run the script in a TS before the first restart. When the machine reboots the specified
+	maintenance background and logon messages are displayed. The existing messages and background 
+	details	are captured into text backup files. 
+
+	Post driver installation, run the script again, it will automatically read in the backup 
+	files and revert settings.
 
 .NOTES
     FileName:    Invoke-ITMaintenanceMessage.ps1
