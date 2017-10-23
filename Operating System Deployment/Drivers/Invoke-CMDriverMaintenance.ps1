@@ -65,13 +65,15 @@ function Write-CMLogEntry {
 }
 
 function Update-Drivers {
-	
-	# Apply driver maintenance package
+	BEGIN 
+	{
+		Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
+		Write-CMLogEntry -Value "Reading drivers from $DriverPackagePath" -Severity 1
+	}
 	PROCESS
 	{
+		# Apply driver maintenance package
 		try {
-			Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
-			Write-CMLogEntry -Value "Reading drivers from $DriverPackagePath" -Severity 1
 			if ((Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse).count -gt 0) {
 				Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse | ForEach-Object {
 					pnputil /add-driver $_.FullName /install
@@ -86,7 +88,10 @@ function Update-Drivers {
 			Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 		}
 	}
-	Return $LastExitCode
+	END {
+		Write-CMLogEntry -Value "Finished driver maintenance." -Severity 1
+		Return $LastExitCode
+	}
 }
 
 Update-Drivers
