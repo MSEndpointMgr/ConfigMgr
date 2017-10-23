@@ -76,19 +76,20 @@ function Update-Drivers {
 				Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse | ForEach-Object {
 					pnputil /add-driver $_.FullName /install
 				} | Out-File -FilePath (Join-Path -Path $LogFilePath -ChildPath DriverMaintenance.log) -Force
-				Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
+				Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1; exit 0
 			}
 			else {
-				Write-CMLogEntry -Value "No driver inf files found in $DriverPackagePath." -Severity 3
+				Write-CMLogEntry -Value "No driver inf files found in $DriverPackagePath." -Severity 3; exit 1
 			}
 		}
 		catch [System.Exception] {
 			Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 		}
 	}
+	Return $LastExitCode
 }
 
 Update-Drivers
 
-exit $LASTEXITCODE
+
 
