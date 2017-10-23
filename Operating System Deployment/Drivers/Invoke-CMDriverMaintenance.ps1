@@ -65,19 +65,22 @@ function Write-CMLogEntry {
 }
 
 # Apply driver maintenance package
-try {
-	Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
-	Write-CMLogEntry -Value "Reading drivers from $DriverPackagePath" -Severity 1
-	if ((Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse).count -gt 0) {
-		Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse | ForEach-Object {
-			pnputil /add-driver $_.FullName /install
-		} | Out-File -FilePath (Join-Path -Path $LogFilePath -ChildPath DriverMaintenance.log) -Force
-		Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
+Process {
+	try {
+		Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
+		Write-CMLogEntry -Value "Reading drivers from $DriverPackagePath" -Severity 1
+		if ((Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse).count -gt 0) {
+			Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse | ForEach-Object {
+				pnputil /add-driver $_.FullName /install
+			} | Out-File -FilePath (Join-Path -Path $LogFilePath -ChildPath DriverMaintenance.log) -Force
+			Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
+		}
+		else {
+			Write-CMLogEntry -Value "No driver inf files found in $DriverPackagePath." -Severity 3; exit 1
+		}
+		#Restart-Computer -Force
 	}
-	else {
-		Write-CMLogEntry -Value "No driver inf files found in $DriverPackagePath." -Severity 3; exit 1
+	catch [System.Exception] {
+		Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
-	
-} catch [System.Exception] {
-	Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 }
