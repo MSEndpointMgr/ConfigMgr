@@ -90,3 +90,5 @@ function Update-Drivers {
 
 Update-Drivers
 
+exit $LASTEXITCODE
+
