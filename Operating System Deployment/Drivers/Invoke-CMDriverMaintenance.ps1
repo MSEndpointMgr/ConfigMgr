@@ -24,7 +24,6 @@
 $TaskSequenceBase = Join-Path -Path (Get-WmiObject Win32_OperatingSystem).SystemDrive -ChildPath "_SMSTaskSequence"
 $LogFilePath = Join-Path -Path (Get-WmiObject Win32_OperatingSystem).SystemDrive -ChildPath "Windows\Logs"
 $DriverPackagePath = Join-Path -Path $TaskSequenceBase -ChildPath "DriverPackage"
-Write-Output "TaskSequenceBase is $TaskSequenceBase. LogFilePath is $LogFilePath. Driver package path is $DriverPackagePath" | Out-File -FilePath C:\Variables.txt
 
 function Write-CMLogEntry {
 	param (
