@@ -11,19 +11,20 @@
     Author:      Maurice Daly
     Contact:     @MoDaly_IT
     Created:     2017-10-13
-	Updated:     2017-10-22
+	Updated:     2017-10-23
 
 	Minimum required version of ConfigMgr WebService: 1.4.0
     
     Version history:
     1.0.0 - (2017-10-13) Script created
-	1.0.1 - (2017-10-22) Variable placement
+	1.0.1 - (2017-10-23) Variable placement and function placement
 #>
 
 # Define Variables
 $TaskSequenceBase = Join-Path -Path (Get-WmiObject Win32_OperatingSystem).SystemDrive -ChildPath "_SMSTaskSequence"
 $LogFilePath = Join-Path -Path (Get-WmiObject Win32_OperatingSystem).SystemDrive -ChildPath "Windows\Logs"
 $DriverPackagePath = Join-Path -Path $TaskSequenceBase -ChildPath "DriverPackage"
+Write-Output "TaskSequenceBase is $TaskSequenceBase. LogFilePath is $LogFilePath. Driver package path is $DriverPackagePath" | Out-File -FilePath C:\Variables.txt
 
 function Write-CMLogEntry {
 	param (
@@ -64,23 +65,29 @@ function Write-CMLogEntry {
 	}
 }
 
-# Apply driver maintenance package
-Process {
-	try {
-		Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
-		Write-CMLogEntry -Value "Reading drivers from $DriverPackagePath" -Severity 1
-		if ((Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse).count -gt 0) {
-			Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse | ForEach-Object {
-				pnputil /add-driver $_.FullName /install
-			} | Out-File -FilePath (Join-Path -Path $LogFilePath -ChildPath DriverMaintenance.log) -Force
-			Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
+function Update-Drivers {
+	
+	# Apply driver maintenance package
+	PROCESS
+	{
+		try {
+			Write-CMLogEntry -Value "Starting driver installation process" -Severity 1
+			Write-CMLogEntry -Value "Reading drivers from $DriverPackagePath" -Severity 1
+			if ((Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse).count -gt 0) {
+				Get-ChildItem -Path $DriverPackagePath -Filter *.inf -Recurse | ForEach-Object {
+					pnputil /add-driver $_.FullName /install
+				} | Out-File -FilePath (Join-Path -Path $LogFilePath -ChildPath DriverMaintenance.log) -Force
+				Write-CMLogEntry -Value "Driver installation complete. Restart required" -Severity 1
+			}
+			else {
+				Write-CMLogEntry -Value "No driver inf files found in $DriverPackagePath." -Severity 3
+			}
 		}
-		else {
-			Write-CMLogEntry -Value "No driver inf files found in $DriverPackagePath." -Severity 3; exit 1
+		catch [System.Exception] {
+			Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 		}
-		#Restart-Computer -Force
-	}
-	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occurred while attempting to apply the driver maintenance package. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 }
+
+Update-Drivers
+
