@@ -256,7 +256,7 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object Expand-Property SystemSKU
+			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
