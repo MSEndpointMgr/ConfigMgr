@@ -11,6 +11,9 @@
 	Post driver installation, run the script again, it will automatically read in the backup 
 	files and revert settings.
 
+.EXAMPLE
+	.\Invoke-ITMaintenanceMessage -MaintenanceMessage $True
+
 .NOTES
     FileName:    Invoke-ITMaintenanceMessage.ps1
     Author:      Maurice Daly
@@ -21,6 +24,12 @@
     Version history:
     1.0.0 - (2017-10-13) Script created
 #>
+[CmdletBinding(SupportsShouldProcess = $true)]
+param (
+	[parameter(Mandatory = $true, HelpMessage = "Turn on or off the maintenance message")]
+	[ValidateNotNullOrEmpty()]
+	[Boolean]$MaintenanceMessage
+)
 
 # Set Maintenance Values - Required for maintenance notice and wallpaper
 $MaintenanceNotice = "Your machine will reboot shortly and be ready for use. DO NOT log in to the machine at this point."
@@ -103,14 +112,14 @@ function Enable-Maintenance {
 		Set-ItemProperty -Path $PersonalizationRegPath -Name "NoChangingLockScreen" -Value $false
 	}
 	Set-ItemProperty -Path $PersonalizationRegPath -Name "LockScreenImage" -Value $MaintenanceBackground
-	Start-Sleep -Seconds 5
+	sleep -Seconds 10
 }
 
-if ($CurrentLegalCaption -ne $MaintenanceCaption) {
+if ($MaintenanceMessage -eq $true) {
 	Enable-Maintenance
-}elseif ($CurrentLegalCaption -eq $Null) {
-	Enable-Maintenance
-}else {
+}
+
+if ($MaintenanceMessage -eq $false){
 	try {
 		# Revert previous legal caption, legal notce and lock screen values
 		Update-RegistryValue -RegistryKey $LegalRegNoticePath -RegistryItem LegalNoticeCaption -BackupFile (Join-Path -Path $(Get-ScriptDirectory) -ChildPath $LegalCaptionBackupFile) -Action Restore
