@@ -18,14 +18,14 @@
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
 
 .EXAMPLE
-	.\Invoke-CMDownloadDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -OSMaintenance $false
 	
 .NOTES
-    FileName:    Invoke-CMDownloadDriverPackage.ps1
+    FileName:    Invoke-CMApplyDriverPackage.ps1
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-	Updated:     2017-10-12
+	Updated:     2017-10-29
 	
 	Minimum required version of ConfigMgr WebService: 1.4.0
     
@@ -47,18 +47,22 @@
 	1.1.3 - (2017-09-18) Added support for downloading package content instead of setting OSDDownloadDownloadPackages variable.
 	1.1.4 - (2017-09-19) Added support for installing driver package directly from this script instead of running a seperate DISM command line step.
 	1.1.5 - (2017-10-12) Added support for in full OS driver maintaince updates
+	1.1.6 - (2017-10-29) Fixed an issue when detecting Microsoft manufacturer information
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
 	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$URI,
+
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
+
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Filter = ([System.String]::Empty),
+
 	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used as part of an in-OS maintenance task")]
 	[ValidateSet($false, $true)]
 	[string]$OSMaintenance = $false
@@ -123,10 +127,10 @@ Process {
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath	 = $FilePath
-			NoNewWindow  = $true
-			Passthru	 = $true
-			ErrorAction  = "Stop"
+			FilePath = $FilePath
+			NoNewWindow = $true
+			Passthru = $true
+			ErrorAction = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -223,7 +227,7 @@ Process {
 		$TSEnvironment.Value("OSDDownloadDestinationPath") = [System.String]::Empty
 	}
 	
-	function Return-OSName{
+	function Return-OSName {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Windows build version must be provided")]
 			[ValidateNotNullOrEmpty()]
@@ -242,7 +246,7 @@ Process {
 				$OSName = "Windows 7"
 			}
 		}
-		Return $OSName
+		return $OSName
 	}
 	
 	# Write log file for script execution
@@ -256,7 +260,7 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object Expand-Property SystemSKU
+			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
