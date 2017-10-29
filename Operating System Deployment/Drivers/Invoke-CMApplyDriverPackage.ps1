@@ -18,7 +18,11 @@
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
 
 .EXAMPLE
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -OSMaintenance $false
+	# Detect, download and apply drivers during OS deployment with ConfigMgr:
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
+
+	# Detect and download drivers during OS upgrade with ConfigMgr:
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -OSMaintenance
 	
 .NOTES
     FileName:    Invoke-CMApplyDriverPackage.ps1
@@ -44,28 +48,28 @@
 						 $OSImageVersion will now only contain the most recent version if multiple OS images is referenced in the Task Sequence
 	1.1.1 - (2017-09-12) Updated script to match the system SKU for Dell, Lenovo and HP models. Added architecture check for matching packages
 	1.1.2 - (2017-09-15) Replaced computer model matching with SystemSKU. Added script with support for different exit codes
-	1.1.3 - (2017-09-18) Added support for downloading package content instead of setting OSDDownloadDownloadPackages variable.
-	1.1.4 - (2017-09-19) Added support for installing driver package directly from this script instead of running a seperate DISM command line step.
+	1.1.3 - (2017-09-18) Added support for downloading package content instead of setting OSDDownloadDownloadPackages variable
+	1.1.4 - (2017-09-19) Added support for installing driver package directly from this script instead of running a seperate DISM command line step
 	1.1.5 - (2017-10-12) Added support for in full OS driver maintaince updates
 	1.1.6 - (2017-10-29) Fixed an issue when detecting Microsoft manufacturer information
+	1.1.7 - (2017-10-29) Changed the OSMainteance parameter from a string to a switch object, make sure that your implementation of this is amended in any task sequence steps
 #>
-[CmdletBinding(SupportsShouldProcess = $true)]
+[CmdletBinding(SupportsShouldProcess=$true)]
 param (
-	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
+	[parameter(Mandatory=$true, HelpMessage="Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$URI,
 
-	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
+	[parameter(Mandatory=$true, HelpMessage="Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
 
-	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
+	[parameter(Mandatory=$false, HelpMessage="Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Filter = ([System.String]::Empty),
 
-	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used as part of an in-OS maintenance task")]
-	[ValidateSet($false, $true)]
-	[string]$OSMaintenance = $false
+	[parameter(Mandatory=$false, HelpMessage="Specify if the script is to be used as part of an in-OS maintenance task")]
+	[switch]$OSMaintenance
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -311,7 +315,7 @@ Process {
 		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 2
 	}
 	
-	if ($OSMaintenance -eq $false) {
+	if ($PSBoundParameters.ContainsKey("OSMaintenance") -eq $false) {
 		#Determine OS Image version for running task sequence from web service
 		Write-CMLogEntry -Value "Script is running in OS deployment phase" -Severity 1
 		try {
@@ -422,7 +426,7 @@ Process {
 		
 							try {
 								if ($DownloadInvocation -eq 0) {
-									if ($OSMaintenance -eq $false) {
+									if ($PSBoundParameters.ContainsKey("OSMaintenance") -eq $false) {
 										# Apply drivers recursively from downloaded driver package location
 										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
 										$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
@@ -467,7 +471,7 @@ Process {
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
-									if ($OSMaintenance -eq $false) {
+									if ($PSBoundParameters.ContainsKey("OSMaintenance") -eq $false) {
 										# Apply drivers recursively from downloaded driver package location
 										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
 										$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
