@@ -1,28 +1,47 @@
 ﻿<#
 .SYNOPSIS
-
+    Create Language Pack packages in ConfigMgr.
 
 .DESCRIPTION
+    This script will create Language Pack packages from a mounted Windows Language Pack ISO media in ConfigMgr.
+    It works with Windows 10 version 1607 and forward.
 
+.PARAMETER SiteServer
+    Site server where the SMS Provider is installed.
 
-.PARAMETER Param
-    Param description.
+.PARAMETER ISORootPath
+    Root of the mounted Windows Language Pack ISO, e.g. F:\.
 
-.PARAMETER ShowProgress
-    Show a progressbar displaying the current operation.
+.PARAMETER PackageSourcePath
+    Root path for where the Language Pack package source files will be stored.
+
+.PARAMETER LanguagePacks
+    Specify the Language Pack ID's that should be created as Packages.
+
+.PARAMETER LanguagePackArchitecture
+    Specify the Language Pack architecture. Used for creating sub-folders in the package source location and within the Language Pack package name replacing %3, e.g. Language Pack - %1 %2 %3
+
+.PARAMETER PackageName
+    This string will be included within the automatically generated package name at location %1, e.g. Language Pack - %1 %2 %3
+
+.PARAMETER WindowsVersion
+    Specify the targeted Windows version, e.g. 1709. Used for creating sub-folders in the package source location and when replacing location %2 for the Language Pack package name, e.g. Language Pack - %1 %2 %3.
+
+.PARAMETER WindowsBuildnumber
+    Specify the targeted Windows build number, e.g. 16299. Used as the Version property of the Language Pack package object.
 
 .EXAMPLE
-    
+    .\New-CMLanguagePackPackage.ps1 -SiteServer "CM01" -ISORootPath "F:\" -PackageSourcePath "\\CM01\CMSource\OSD\LanguagePacks\Windows10" -LanguagePacks "da-DK", "sv-SE", "nb-NO" -LanguagePackArchitecture "x64" -PackageName "Windows 10" -WindowsVersion "1709" -WindowsBuildnumber "16299"
 
 .NOTES
-    FileName:    <script name>.ps1
+    FileName:    New-CMLanguagePackPackage.ps1
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
-    Created:     2017-07-25
-    Updated:     2017-07-25
+    Created:     2017-10-30
+    Updated:     2017-10-30
     
     Version history:
-    1.0.0 - (2017-07-25) Script created
+    1.0.0 - (2017-10-30) Script created
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -31,7 +50,7 @@ param(
     [ValidateScript({Test-Connection -ComputerName $_ -Count 1 -Quiet})]
     [string]$SiteServer,
 
-    [parameter(Mandatory=$true, HelpMessage="Root of the Windows Language Pack mounted ISO.")]
+    [parameter(Mandatory=$true, HelpMessage="Root of the mounted Windows Language Pack ISO, e.g. F:\.")]
     [ValidateNotNullOrEmpty()]
     [string]$ISORootPath,
 
@@ -44,16 +63,16 @@ param(
     [ValidateSet("ar-sa", "bg-bg", "cs-cz", "da-dk", "de-de", "el-gr", "en-gb", "en-us", "es-es", "es-mx", "et-ee", "fi-fi", "fr-ca", "fr-fr", "he-il", "hr-hr", "hu-hu", "it-it", "ja-jp", "ko-kr", "lt-lt", "lv-lv", "nb-no", "nl-nl", "pl-pl", "pt-br", "pt-pt", "ro-ro", "ru-ru", "sk-sk", "sl-si", "sr-latn-rs", "sv-se", "th-th", "tr-tr", "uk-ua", "zh-cn", "zh-tw")]
     [string[]]$LanguagePacks = ("ar-sa", "bg-bg", "cs-cz", "da-dk", "de-de", "el-gr", "en-gb", "en-us", "es-es", "es-mx", "et-ee", "fi-fi", "fr-ca", "fr-fr", "he-il", "hr-hr", "hu-hu", "it-it", "ja-jp", "ko-kr", "lt-lt", "lv-lv", "nb-no", "nl-nl", "pl-pl", "pt-br", "pt-pt", "ro-ro", "ru-ru", "sk-sk", "sl-si", "sr-latn-rs", "sv-se", "th-th", "tr-tr", "uk-ua", "zh-cn", "zh-tw"),
 
-    [parameter(Mandatory=$true, HelpMessage="Specify the Language Pack architecture. Used for creating sub-folders in the package source location and within the Language Pack package name replacing %3, e.g. Language Pack - %1 %2 %3")]
+    [parameter(Mandatory=$true, HelpMessage="Specify the Language Pack architecture. Used for creating sub-folders in the package source location and within the Language Pack package name replacing %3, e.g. Language Pack - %1 %2 %3.")]
     [ValidateNotNullOrEmpty()]
     [ValidateSet("x64", "x86")]
     [string[]]$LanguagePackArchitecture = ("x64", "x86"),
 
-    [parameter(Mandatory=$true, HelpMessage="This string will be included within the automatically generated package name at location %1, e.g. Language Pack - %1 %2 %3")]
+    [parameter(Mandatory=$true, HelpMessage="This string will be included within the automatically generated package name at location %1, e.g. Language Pack - %1 %2 %3.")]
     [ValidateNotNullOrEmpty()]
     [string]$PackageName,
 
-    [parameter(Mandatory=$true, HelpMessage="Specify the targeted Windows version, e.g. 1709. Used for creating sub-folders in the package source location and when replacing location %2 for the Language Pack package name, e.g. Language Pack - %1 %2 %3")]
+    [parameter(Mandatory=$true, HelpMessage="Specify the targeted Windows version, e.g. 1709. Used for creating sub-folders in the package source location and when replacing location %2 for the Language Pack package name, e.g. Language Pack - %1 %2 %3.")]
     [ValidateNotNullOrEmpty()]
     [ValidateLength(1,4)]
     [string]$WindowsVersion,
