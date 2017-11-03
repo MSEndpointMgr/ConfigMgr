@@ -23,7 +23,7 @@
 
 .EXAMPLE
     .\Invoke-CMDownloadLanguagePack.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -BuildNumber "14393" -Filter "Language Pack"
-
+    
 .NOTES
     FileName:    Invoke-CMDownloadLanguagePack.ps1
     Author:      Nickolaj Andersen
