@@ -54,7 +54,7 @@
     1.1.4 - (2017-09-19) Added support for installing driver package directly from this script instead of running a seperate DISM command line step
     1.1.5 - (2017-10-12) Added support for in full OS driver maintenance updates
     1.1.6 - (2017-10-29) Fixed an issue when detecting Microsoft manufacturer information
-    1.1.7 - (2017-10-29) Changed the OSMainteance parameter from a string to a switch object, make sure that your implementation of this is amended in any task sequence steps
+    1.1.7 - (2017-10-29) Changed the OSMaintenance parameter from a string to a switch object, make sure that your implementation of this is amended in any task sequence steps
     1.1.8 - (2017-11-07) Added support for driver fallback packages when the UseDriverFallback param is used
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
