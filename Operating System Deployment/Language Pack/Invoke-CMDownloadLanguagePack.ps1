@@ -29,11 +29,12 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2017-07-22
-    Updated:     2017-10-08
+    Updated:     2017-11-08
     
     Version history:
     1.0.0 - (2017-07-22) Script created
     1.0.1 - (2017-10-08) - Added functionality to download the detected language packs
+    1.0.2 - (2017-11-08) - Fixed a bug when validating the param value for PackageID
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -149,7 +150,7 @@ Process {
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
+			[ValidatePattern("^([A-Z0-9]{3}[A-F0-9]{5})(\s*)(,[A-Z0-9]{3}[A-F0-9]{5})*$")]
 			[string]$PackageID,
 
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
@@ -188,7 +189,7 @@ Process {
 		# Invoke download of package content
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
-			$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
+			$ReturnCode = Invoke-Executable -FilePath (Join-Path -Path $env:SystemRoot -ChildPath "CCM\OSDDownloadContent.exe")
 
 			# Match on return code
 			if ($ReturnCode -eq 0) {
@@ -199,7 +200,7 @@ Process {
 			}
 		}
 		catch [System.Exception] {
-			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 12
+			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3 ; exit 1
 		}
 
 		return $ReturnCode
