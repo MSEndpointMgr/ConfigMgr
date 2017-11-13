@@ -61,22 +61,21 @@
 param (
 	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$URI,
+	[string]$URI,
+
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$SecretKey,
+	[string]$SecretKey,
+
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$Filter = ([System.String]::Empty),
+	[string]$Filter = ([System.String]::Empty),
+
 	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used as part of an in-OS maintenance task")]
-	[switch]
-	$OSMaintenance,
+	[switch]$OSMaintenance,
+
 	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used with a driver fallback package")]
-	[switch]
-	$UseDriverFallback
+	[switch]$UseDriverFallback
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -93,17 +92,14 @@ Process {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$Value,
+			[string]$Value,
 			[parameter(Mandatory = $true, HelpMessage = "Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("1", "2", "3")]
-			[string]
-			$Severity,
+			[string]$Severity,
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$FileName = "ApplyDriverPackage.log"
+			[string]$FileName = "ApplyDriverPackage.log"
 		)
 		# Determine log file location
 		$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
@@ -133,20 +129,18 @@ Process {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$FilePath,
+			[string]$FilePath,
 			[parameter(Mandatory = $false, HelpMessage = "Specify arguments that will be passed to the executable")]
 			[ValidateNotNull()]
-			[string]
-			$Arguments
+			[string]$Arguments
 		)
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath	   = $FilePath
-			NoNewWindow    = $true
-			Passthru	   = $true
-			ErrorAction    = "Stop"
+			FilePath = $FilePath
+			NoNewWindow = $true
+			Passthru = $true
+			ErrorAction = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -173,23 +167,19 @@ Process {
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
-			[string]
-			$PackageID,
+			[string]$PackageID,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("Custom", "TSCache", "CCMCache")]
-			[string]
-			$DestinationLocationType,
+			[string]$DestinationLocationType,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$DestinationVariableName,
+			[string]$DestinationVariableName,
 			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$CustomLocationPath
+			[string]$CustomLocationPath
 		)
 		# Set OSDDownloadDownloadPackages
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
@@ -249,10 +239,9 @@ Process {
 	
 	function Return-OSName {
 		param (
-			[parameter(Mandatory = $true, HelpMessage = "Windows build version must be provided")]
+			[parameter(Mandatory=$true, HelpMessage="Windows build version must be provided")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$OSImageVersion
+			[string]$OSImageVersion
 		)
 		
 		# Get operating system name from version
@@ -518,7 +507,8 @@ Process {
 					}
 				}
 				elseif ($PSBoundParameters.ContainsKey("UseDriverFallback") -eq $true) {
-					Write-CMLogEntry -Value "Driver fallback parameter specified and no matching driver packages found." -Severity 1
+					Write-CMLogEntry -Value "Driver fallback parameter specified and no matching driver packages found" -Severity 1
+
 					# Process packages returned from web service
 					if ($Packages -ne $null) {
 						Write-CMLogEntry -Value "Attempting to match a driver fallback package" -Severity 1
@@ -526,6 +516,9 @@ Process {
 							Write-CMLogEntry -Value "Processing $($Package.PackageName)" -Severity 1
 							if (($Package.PackageName -match "Driver Fallback") -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 								$PackageList.Add($Package) | Out-Null
+							}
+
+							if ($PackageList.Count -eq 1) {
 								try {
 									# Attempt to download driver fallback package content
 									Write-CMLogEntry -Value "Attempting to download driver fallback package content" -Severity 1
@@ -537,26 +530,30 @@ Process {
 												# Apply drivers recursively from downloaded driver package location
 												Write-CMLogEntry -Value "Driver fallback package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
 												$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
+
 												# Validate driver injection
 												if ($ApplyDriverInvocation -eq 0) {
 													Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
 												}
 												else {
-													Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Exit code: $($ApplyDriverInvocation)" -Severity 3; exit 14
+													Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Exit code: $($ApplyDriverInvocation)" -Severity 3; exit 19
 												}
 											}
 										}
 										else {
-											Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
+											Write-CMLogEntry -Value "Fallback driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 20
 										}
 									}
 									catch [System.Exception] {
-										Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Error message: $($_.Exception.Message)" -Severity 3; exit 14
+										Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Error message: $($_.Exception.Message)" -Severity 3; exit 18
 									}
 								}
 								catch [System.Exception] {
-									Write-CMLogEntry -Value "An error occurred while downloading driver package content (single package match). Error message: $($_.Exception.Message)" -Severity 3; exit 5
+									Write-CMLogEntry -Value "An error occurred while downloading fallback driver package content. Error message: $($_.Exception.Message)" -Severity 3; exit 17
 								}
+							}
+							else {
+								Write-CMLogEntry -Value "Either empty or an unsupported count of fallback package content detected" -Severity 3; exit 16
 							}
 						}
 					}
