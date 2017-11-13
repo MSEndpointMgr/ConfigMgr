@@ -214,7 +214,7 @@ Process {
                                 }
                             }
                             catch [System.Exception] {
-                                Write-Warning -Message "An error occurred while backing up Boot Image baseline file. Error message: $($_.Exception.Message)"
+                                Write-Warning -Message "An error occurred while injecting package in Boot Image. Error message: $($_.Exception.Message)"
                             }
 
                             # Dismount boot image
