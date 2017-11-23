@@ -23,7 +23,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2017-10-09
+    Updated:     2017-11-23
     
     Version history:
     1.0.0 - (2017-05-22) Script created (Nickolaj Andersen)
@@ -31,7 +31,8 @@
     1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models (Maurice Daly)
     1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models (Maurice Daly)
     1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
-	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable (Maurice Daly)
+    1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable (Maurice Daly)
+    1.0.6 - (2017-11-23) Enabled HP support.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
