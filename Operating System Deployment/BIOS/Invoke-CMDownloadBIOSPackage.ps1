@@ -344,7 +344,7 @@ Process {
 	$ErrorActionPreference = "Stop"
 	
 	# Validate supported system was detected
-	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo") {
+	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo" -or $ComputerManufacturer -eq "Hewlett-Packard") {
 		# Process packages returned from web service
 		if ($Packages -ne $null) {
 			# Add packages with matching criteria to list
