@@ -208,7 +208,7 @@ Process {
                             }
 
                             # Refresh package source (re-creates the Boot Image)
-                            if ($PSBoundParameters["RefreshPackage"]) {
+                            if ($PSBoundParameters["UpdatePackage"]) {
                                 Write-Verbose -Message "Attempting to refresh the Boot Image package, this operation will take some time"
                                 $BootImagePackage.Get()
                                 $InvocationUpdatePackage = $BootImagePackage.RefreshPkgSource()
