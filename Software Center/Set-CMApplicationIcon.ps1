@@ -19,7 +19,7 @@ Example:
 	.\Set-CMApplicationIcon.ps1 -SiteServer "Your Site Server" -SiteCode "Your Site Code" -ApplicationName "7-zip"
 	
 2.	Resize application icon with specified size between 16 to 512 pixel
-	.\Set-CMApplicationIcon.ps1 -SiteServer "Your Site Server" -SiteCode "Your Site Code" -ApplicationName "7-zip"
+	.\Set-CMApplicationIcon.ps1 -SiteServer "Your Site Server" -SiteCode "Your Site Code" -ApplicationName "7-zip" -IconSize 400
 
 3.	Resize application icon with 110 x 110 pixel, and export the resized icon file to a specified folder
 	.\Set-CMApplicationIcon.ps1 -SiteServer "Your Site Server" -SiteCode "Your Site Code" -ApplicationName "7-zip" -IconFolder "D:\Icons"
