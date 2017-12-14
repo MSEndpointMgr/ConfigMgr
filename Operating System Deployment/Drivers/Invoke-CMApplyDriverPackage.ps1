@@ -265,7 +265,6 @@ Process {
 	
 	# Determine manufacturer
 	$ComputerManufacturer = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Manufacturer).Trim()
-	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	
 	# Determine manufacturer name and hardware information
 	switch -Wildcard ($ComputerManufacturer) {
@@ -294,6 +293,7 @@ Process {
 			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 		}
 	}
+	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	if (-not [string]::IsNullOrEmpty($SystemSKU)) {
 		Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
@@ -432,6 +432,7 @@ Process {
 							# Attempt to download driver package content
 							Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+							Write-CMLogEntry -Value "Attempting to downlowd package $($Package.PackageID) content from DP" -Severity 1
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
@@ -477,6 +478,7 @@ Process {
 							
 							# Attempt to download driver package content
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+							Write-CMLogEntry -Value "Attempting to downlowd package $($Package.PackageID) content from DP" -Severity 1
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
