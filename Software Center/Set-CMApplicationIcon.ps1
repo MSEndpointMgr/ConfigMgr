@@ -197,6 +197,9 @@ bU0eFn1TcVJAdZ1TWa/XxTQ+IH6d7e1tmRPK4HjzRTL/O2b4BUErcBXsnNaeAAAAAElFTkSuQmCC')
 	Get-CMApplicationsIconDetails
 }
 
+#Resize the Icon
+Resize-Icon
+
 #In ConfigMgr CB 1710, it supports use 512 x 512 pixel icon files, how ever Set-CMApplication CmdLet supports maximum size of an icon is 250x250 pixel. As I tested, use Set-CMApplication set icon is quite slow.
 try
 {
