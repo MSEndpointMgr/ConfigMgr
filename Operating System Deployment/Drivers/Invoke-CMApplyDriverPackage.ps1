@@ -32,7 +32,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2017-12-12
+    Updated:     2017-12-14
 	
     Minimum required version of ConfigMgr WebService: 1.4.0
     
@@ -56,7 +56,8 @@
     1.1.6 - (2017-10-29) Fixed an issue when detecting Microsoft manufacturer information
     1.1.7 - (2017-10-29) Changed the OSMaintenance parameter from a string to a switch object, make sure that your implementation of this is amended in any task sequence steps
     1.1.8 - (2017-11-07) Added support for driver fallback packages when the UseDriverFallback param is used
-    1.1.9 - (2017-12-12) Added additional output for failure to detect system SKU value from WMI
+	1.1.9 - (2017-12-12) Added additional output for failure to detect system SKU value from WMI
+	1.2.0 - (2017-12-14) Fixed an issue where the HP packages would not properly be matched against the OS image version returned by the web service
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -295,9 +296,10 @@ Process {
 	}
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
-	if (-not [string]::IsNullOrEmpty($SystemSKU)) {
+	if (-not([string]::IsNullOrEmpty($SystemSKU))) {
 		Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
-	}else{
+	}
+	else {
 		Write-CMLogEntry -Value "Unable to determine system SKU value" -Severity 2
 	}
 	
@@ -432,7 +434,7 @@ Process {
 							# Attempt to download driver package content
 							Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-							Write-CMLogEntry -Value "Attempting to downlowd package $($Package.PackageID) content from DP" -Severity 1
+							Write-CMLogEntry -Value "Attempting to download package $($Package.PackageID) content from Distribution Point" -Severity 1
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
@@ -468,9 +470,7 @@ Process {
 							# Determine matching driver package from array list with vendor specific solutions
 							if ($ComputerManufacturer -eq "Hewlett-Packard") {
 								Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSImageVersion)" -Severity 1
-								$Package = ($PackageList | Where-Object {
-										$_.PackageName -match $OSImageVersion
-									}) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+								$Package = ($PackageList | Where-Object { $_.PackageName -match ([System.Version]$OSImageVersion).Build}) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 							}
 							else {
 								$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
@@ -478,7 +478,7 @@ Process {
 							
 							# Attempt to download driver package content
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-							Write-CMLogEntry -Value "Attempting to downlowd package $($Package.PackageID) content from DP" -Severity 1
+							Write-CMLogEntry -Value "Attempting to download package $($Package.PackageID) content from Distribution Point" -Severity 1
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
