@@ -168,7 +168,7 @@ Process {
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[ValidatePattern('^[A-Z0-9]{3}[A-F0-9]{5}$')]
+			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
 			[string]$PackageID,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
