@@ -37,7 +37,7 @@
     Created:     2017-03-27
     Updated:     2018-01-03
 	
-    Minimum required version of ConfigMgr WebService: 1.4.0
+    Minimum required version of ConfigMgr WebService: 1.5.0
     
     Version history:
     1.0.0 - (2017-03-27) Script created
