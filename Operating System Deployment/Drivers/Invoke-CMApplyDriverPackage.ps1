@@ -327,7 +327,7 @@ Process {
 	}
 	
 	if ($PSBoundParameters.ContainsKey("OSMaintenance") -eq $false) {
-		#Determine OS Image version for running task sequence from web service
+		# Determine OS Image version for running task sequence from web service
 		Write-CMLogEntry -Value "Script is running in OS deployment phase" -Severity 1
 		try {
 			$TSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
