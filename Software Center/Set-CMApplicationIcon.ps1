@@ -11,6 +11,7 @@
 		This funtion can set icon for applications
     - 
 History:
+-- 2017. Dec.19 Bug fixed.
 -- Version 2.0 - 2017 Dec.13. Use a dummy icon file if there is no icon assgined earlier for applications, then set the new icon file again.
 -- Version.1.0 2017 Dec.04. Created script. by Zeng Yinghua
 
@@ -40,23 +41,23 @@ param (
 	[parameter(Mandatory = $true, HelpMessage = "Specify Site Server Name")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SiteServer,
+	
 	#Site Code
-
 	[parameter(Mandatory = $true, HelpMessage = "Specify SiteCode")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SiteCode,
-	#Site Code
 
+	#Application Name
 	[parameter(Mandatory = $true, HelpMessage = "Specify ApplicationName")]
 	[ValidateNotNullOrEmpty()]
 	[string]$ApplicationName,
+	
 	#Icon size
-
 	[parameter(Mandatory = $false, ValueFromPipeline = $true, HelpMessage = "Specify Icon Size, recommanded 108")]
 	[ValidateRange(16, 512)]
 	[int]$IconSize = 110,
+	
 	#Icon folder
-
 	[parameter(Mandatory = $false, ValueFromPipeline = $true, HelpMessage = "Specify Icon folder name")]
 	[ValidateScript({
 			if (-Not ($_ | Test-Path))
@@ -70,7 +71,9 @@ param (
 			return $true
 		})]
 	[System.IO.FileInfo]$IconFolder = $Env:temp,
-	[parameter(Mandatory = $true, ValueFromPipeline = $true, HelpMessage = "Specify Icon file name")]
+	
+	#Icon File
+	[parameter(Mandatory = $false, ValueFromPipeline = $true, HelpMessage = "Specify Icon file name")]
 	[ValidateScript({
 			if (-Not ($_ | Test-Path))
 			{
