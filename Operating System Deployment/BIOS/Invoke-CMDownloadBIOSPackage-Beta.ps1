@@ -58,7 +58,7 @@ Begin {
 }
 Process {
 	# Functions
-	function global:Write-CMLogEntry {
+	function Write-CMLogEntry {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
@@ -152,38 +152,38 @@ Process {
 			[string]$CustomLocationPath
 		)
 		# Set OSDDownloadDownloadPackages
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDownloadPackages") = "$($PackageID)"
 		
 		# Set OSDDownloadDestinationLocationType
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = "$($DestinationLocationType)"
 		
 		# Set OSDDownloadDestinationVariable
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationVariable") = "$($DestinationVariableName)"
 		
 		# Set OSDDownloadDestinationPath
 		if ($DestinationLocationType -like "Custom") {
-			global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
+			Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
 			$TSEnvironment.Value("OSDDownloadDestinationPath") = "$($CustomLocationPath)"
 		}
 		
 		# Invoke download of package content
 		try {
-			global:Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
+			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
 			$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
 			
 			# Match on return code
 			if ($ReturnCode -eq 0) {
-				global:Write-CMLogEntry -Value "Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
+				Write-CMLogEntry -Value "Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
 			}
 			else {
-				global:Write-CMLogEntry -Value "Package content download process failed with return code $($ReturnCode)" -Severity 2
+				Write-CMLogEntry -Value "Package content download process failed with return code $($ReturnCode)" -Severity 2
 			}
 		}
 		catch [System.Exception] {
-			global:Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3; exit 12
+			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3; exit 12
 		}
 		
 		return $ReturnCode
@@ -191,19 +191,19 @@ Process {
 	
 	function Invoke-CMResetDownloadContentVariables {
 		# Set OSDDownloadDownloadPackages
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDownloadPackages") = [System.String]::Empty
 		
 		# Set OSDDownloadDestinationLocationType
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = [System.String]::Empty
 		
 		# Set OSDDownloadDestinationVariable
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationVariable") = [System.String]::Empty
 		
 		# Set OSDDownloadDestinationPath
-		global:Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
+		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationPath") = [System.String]::Empty
 	}
 	
@@ -222,7 +222,7 @@ Process {
 		if ($ComputerManufacturer -match "Dell") {
 			# Obtain current BIOS release
 			$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-			global:Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
+			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			
 			# Determine Dell BIOS revision format			
 			if ($CurrentBIOSVersion -like "*.*.*") {
@@ -230,7 +230,7 @@ Process {
 				if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
 					# Write output to task sequence variable
 					$TSEnvironment.Value("NewBIOSAvailable") = $true
-					global:Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
 				}
 			}
 			elseif ($CurrentBIOSVersion -like "A*") {
@@ -239,12 +239,12 @@ Process {
 					# Assume that the bios is new as moving from Axx to x.x.x formats
 					# Write output to task sequence variable
 					$TSEnvironment.Value("NewBIOSAvailable") = $true
-					global:Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $CurrentBIOSVersion will be replaced by $AvailableBIOSVersion." -Severity 1
+					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $CurrentBIOSVersion will be replaced by $AvailableBIOSVersion." -Severity 1
 				}
 				elseif ($AvailableBIOSVersion -gt $CurrentBIOSVersion) {
 					# Write output to task sequence variable
 					$TSEnvironment.Value("NewBIOSAvailable") = $true
-					global:Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $CurrentBIOSVersion will be replaced by $AvailableBIOSVersion." -Severity 1
+					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $CurrentBIOSVersion will be replaced by $AvailableBIOSVersion." -Severity 1
 				}
 			}
 		}
@@ -252,14 +252,14 @@ Process {
 		if ($ComputerManufacturer -match "Lenovo") {
 			# Obtain current BIOS release
 			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select -Property *).ReleaseDate).SubString(0, 8)
-			global:Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
-			global:Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
+			Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
+			Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
 			
 			# Compare current BIOS release to available
 			if ($AvailableBIOSReleaseDate -gt $CurrentBIOSReleaseDate) {
 				# Write output to task sequence variable
 				$TSEnvironment.Value("NewBIOSAvailable") = $true
-				global:Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current date release dated $CurrentBIOSReleaseDate will be replaced by release $AvailableBIOSReleaseDate." -Severity 1
+				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current date release dated $CurrentBIOSReleaseDate will be replaced by release $AvailableBIOSReleaseDate." -Severity 1
 			}
 		}
 		
@@ -267,24 +267,24 @@ Process {
 			# Obtain current BIOS release
 			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select -Property *)
 			$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
-			global:Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
+			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			
 			# Compare current BIOS release to available
 			if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
 				# Write output to task sequence variable
 				$TSEnvironment.Value("NewBIOSAvailable") = $true
-				global:Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
 			}
 		}
 	}
 	
 	
 	# Write log file for script execution
-	global:Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
+	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
 	# Determine manufacturer
 	$ComputerManufacturer = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Manufacturer).Trim()
-	global:Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
+	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	
 	# Determine manufacturer name and hardware information
 	switch -Wildcard ($ComputerManufacturer) {
@@ -313,30 +313,30 @@ Process {
 			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 		}
 	}
-	global:Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
+	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	
 	# Supported Manufacturer Array
 	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo")
 	
 	# Get existing BIOS version
 	$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-	global:Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion)" -Severity 1
+	Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion)" -Severity 1
 	
 	# Construct new web service proxy
 	try {
 		$WebService = New-WebServiceProxy -Uri $URI -ErrorAction Stop
 	}
 	catch [System.Exception] {
-		global:Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Call web service for a list of packages
 	try {
 		$Packages = $WebService.GetCMPackage($SecretKey, "$($Filter)")
-		global:Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) BIOS packages from web service" -Severity 1
+		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) BIOS packages from web service" -Severity 1
 	}
 	catch [System.Exception] {
-		global:Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 1
+		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 	}
 	
 	# Construct array list for matching packages
@@ -355,11 +355,11 @@ Process {
 					# Match model, manufacturer criteria
 					if ($Manufacturers -contains $ComputerManufacturer) {
 						if (($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
-							global:Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+							Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
 							$PackageList.Add($Package) | Out-Null
 						}
 						else {
-							global:Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+							Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 						}
 					}
 				}
@@ -369,7 +369,7 @@ Process {
 			if ($PackageList -ne $null) {
 				# Determine the most current package from list
 				if ($PackageList.Count -eq 1) {
-					global:Write-CMLogEntry -Value "BIOS package list contains a single match, attempting to set task sequence variable" -Severity 1
+					Write-CMLogEntry -Value "BIOS package list contains a single match, attempting to set task sequence variable" -Severity 1
 					
 					# Check if BIOS package is newer than currently installed
 					if ($ComputerManufacturer -match "Dell") {
@@ -389,22 +389,22 @@ Process {
 						try {
 							# Check for successful package download
 							if ($DownloadInvocation -eq 0) {
-								global:Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Update located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
+								Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Update located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
 							}
 							else {
-								global:Write-CMLogEntry -Value "BIOS update package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
+								Write-CMLogEntry -Value "BIOS update package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
 							}
 						}
 						catch [System.Exception] {
-							global:Write-CMLogEntry -Value "An error occurred while downloading BIOS update (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
+							Write-CMLogEntry -Value "An error occurred while downloading BIOS update (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
 						}
 					}
 					else {
-						global:Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
+						Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
 					}
 				}
 				elseif ($PackageList.Count -ge 2) {
-					global:Write-CMLogEntry -Value "BIOS package list contains multiple matches, attempting to set task sequence variable" -Severity 1
+					Write-CMLogEntry -Value "BIOS package list contains multiple matches, attempting to set task sequence variable" -Severity 1
 					
 					# Determine the latest BIOS package by creation date
 					if ($ComputerManufacturer -match "Dell") {
@@ -439,7 +439,7 @@ Process {
 							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
 						}
 						else {
-							global:Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
+							Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
 						}
 						
 						if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
@@ -448,34 +448,34 @@ Process {
 							try {
 								# Check for successful package download
 								if ($DownloadInvocation -eq 0) {
-									global:Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Package located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
+									Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Package located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
 								}
 								else {
-									global:Write-CMLogEntry -Value "BIOS package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
+									Write-CMLogEntry -Value "BIOS package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
 								}
 							}
 							catch [System.Exception] {
-								global:Write-CMLogEntry -Value "An error occurred while applying BIOS update (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
+								Write-CMLogEntry -Value "An error occurred while applying BIOS update (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
 							}	
 						}
 						else {
-							global:Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
+							Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
 						}
 					}
 					else {
-						global:Write-CMLogEntry -Value "Unable to determine a matching BIOS package from list since an unsupported count was returned from package list, bailing out" -Severity 2; exit 1
+						Write-CMLogEntry -Value "Unable to determine a matching BIOS package from list since an unsupported count was returned from package list, bailing out" -Severity 2; exit 1
 					}
 				}
 				else {
-					global:Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
+					Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
 				}
 			}
 			else {
-				global:Write-CMLogEntry -Value "BIOS package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 1
+				Write-CMLogEntry -Value "BIOS package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 1
 			}
 		}
 		else {
-			global:Write-CMLogEntry -Value "This script is supported on Dell, Lenovo and HP systems only at this point, bailing out" -Severity 1
+			Write-CMLogEntry -Value "This script is supported on Dell, Lenovo and HP systems only at this point, bailing out" -Severity 1
 		}
 	}
 }
