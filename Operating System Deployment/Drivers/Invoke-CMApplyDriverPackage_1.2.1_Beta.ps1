@@ -98,14 +98,14 @@ Process {
 	# Functions
 	function Write-CMLogEntry {
 		param (
-			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
+			[parameter(Mandatory=$true, HelpMessage="Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$Value,
-			[parameter(Mandatory = $true, HelpMessage = "Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
+			[parameter(Mandatory=$true, HelpMessage="Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("1", "2", "3")]
 			[string]$Severity,
-			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
+			[parameter(Mandatory=$false, HelpMessage="Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$FileName = "ApplyDriverPackage.log"
 		)
@@ -135,10 +135,10 @@ Process {
 	
 	function Invoke-Executable {
 		param (
-			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
+			[parameter(Mandatory=$true, HelpMessage="Specify the file name or path of the executable to be invoked, including the extension")]
 			[ValidateNotNullOrEmpty()]
 			[string]$FilePath,
-			[parameter(Mandatory = $false, HelpMessage = "Specify arguments that will be passed to the executable")]
+			[parameter(Mandatory=$false, HelpMessage="Specify arguments that will be passed to the executable")]
 			[ValidateNotNull()]
 			[string]$Arguments
 		)
@@ -171,21 +171,21 @@ Process {
 	
 	function Invoke-CMDownloadContent {
 		param (
-			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
-			[Parameter(ParameterSetName = "CustomPath")]
+			[parameter(Mandatory=$true, ParameterSetName="NoPath", HelpMessage="Specify a PackageID that will be downloaded.")]
+			[Parameter(ParameterSetName="CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
 			[string]$PackageID,
-			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
-			[Parameter(ParameterSetName = "CustomPath")]
+			[parameter(Mandatory=$true, ParameterSetName="NoPath", HelpMessage="Specify the download location type.")]
+			[Parameter(ParameterSetName="CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("Custom", "TSCache", "CCMCache")]
 			[string]$DestinationLocationType,
-			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
-			[Parameter(ParameterSetName = "CustomPath")]
+			[parameter(Mandatory=$true, ParameterSetName="NoPath", HelpMessage="Save the download location to the specified variable name.")]
+			[Parameter(ParameterSetName="CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[string]$DestinationVariableName,
-			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
+			[parameter(Mandatory=$true, ParameterSetName="CustomPath", HelpMessage="When location type is specified as Custom, specify the custom path.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$CustomLocationPath
 		)
@@ -291,7 +291,7 @@ Process {
             [ValidateNotNullOrEmpty()]
 			[string]$InputObject
         )
-        switch ($OSImageArchitecture) {
+        switch ($InputObject) {
             "9" {
                 $OSImageArchitecture = "x64"
             }
