@@ -23,7 +23,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2018-01-05
+    Updated:     2018-01-09
     
     Version history:
     1.0.0 - (2017-05-22) Script created (Nickolaj Andersen)
@@ -33,7 +33,8 @@
     1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
     1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable (Maurice Daly)
     1.0.6 - (2017-11-23) Enabled HP support.
-	1.0.7 - (2018-01-05) Updated logic for Lenovo BIOS package detection
+    1.0.7 - (2018-01-05) Updated logic for Lenovo BIOS package detection
+1.0.8 - (2018-01-09) Updated script for full OS environments
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -172,7 +173,15 @@ Process {
 		# Invoke download of package content
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
-			$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+			
+			if (Test-Path -Path "C:\Windows\CCM\OSDDownloadContent.exe"){
+				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
+				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
+			}
+			else {
+				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
+				$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+			}
 			
 			# Match on return code
 			if ($ReturnCode -eq 0) {
@@ -218,6 +227,8 @@ Process {
 			[ValidateNotNullOrEmpty()]
 			[string]$ComputerManufacturer
 		)
+		
+		Write-CMLogEntry -Value "Comparing $ComputerManufacturer BIOS release" -Severity 1
 		
 		if ($ComputerManufacturer -match "Dell") {
 			# Obtain current BIOS release
@@ -317,10 +328,6 @@ Process {
 	
 	# Supported Manufacturer Array
 	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo")
-	
-	# Get existing BIOS version
-	$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-	Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion)" -Severity 1
 	
 	# Construct new web service proxy
 	try {
