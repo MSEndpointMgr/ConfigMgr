@@ -446,8 +446,15 @@ Process {
 			# Process packages returned from web service
 			if ($Packages -ne $null) {
 				foreach ($Package in $Packages) {
+					if ([System.String]::IsNullOrEmpty($SystemSKU)) {
+						$ComputerDetectionMethod = "^$($ComputerModel)$"
+					}
+					else {
+						$ComputerDetectionMethod = $SystemSKU
+					}
+
 					# Match model (using SystemSKU), manufacturer, operating system name and architecture criteria
-					if (($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+					if ((($Package.PackageName -match $ComputerDetectionMethod) -or ($Package.PackageDescription -match $ComputerDetectionMethod)) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 						# Match operating system criteria per manufacturer for Windows 10 packages only
 						if ($OSName -like "Windows 10") {
 							switch ($ComputerManufacturer) {
