@@ -102,7 +102,7 @@ Process {
 		"OSUpgrade" {
 			$LogsDirectory = Join-Path $env:SystemRoot "Temp"
 		}
-		"BIOSUpdate" {
+		"DriveUpdate" {
 			$LogsDirectory = Join-Path $env:SystemRoot "Temp"
 		}
 		default {
