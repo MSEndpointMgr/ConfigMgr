@@ -285,12 +285,12 @@ Process {
 			[string]
 			$OSData
 		)
+		$TSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
 		switch ($OSData) {
 			"OSImageVersion" {
 				# Determine OS Image version for running task sequence from web service
 				Write-CMLogEntry -Value "Attempting to detect OSImageVersion property from task sequence, running in DeploymentType: $($DeploymentType)" -Severity 1
 				try {
-					$TSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
 					$OSImageVersion = $WebService.GetCMOSImageVersionForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
 					Write-CMLogEntry -Value "Retrieved OSImageVersion from web service: $($OSImageVersion)" -Severity 1
 					
