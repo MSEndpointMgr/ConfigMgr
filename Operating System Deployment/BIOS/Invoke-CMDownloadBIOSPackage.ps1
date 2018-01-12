@@ -130,10 +130,10 @@ Process {
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath		 = $FilePath
-			NoNewWindow	     = $true
-			Passthru		 = $true
-			ErrorAction	     = "Stop"
+			FilePath = $FilePath
+			NoNewWindow = $true
+			Passthru = $true
+			ErrorAction	= "Stop"
 		}
 		
 		# Add ArgumentList param if present

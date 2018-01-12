@@ -69,23 +69,18 @@
 param (
 	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$URI,
+	[string]$URI,
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$SecretKey,
+	[string]$SecretKey,
 	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.")]
 	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate")]
-	[string]
-	$DeploymentType = "BareMetal",
+	[string]$DeploymentType = "BareMetal",
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$Filter = ([System.String]::Empty),
+	[string]$Filter = ([System.String]::Empty),
 	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used with a driver fallback package")]
-	[switch]
-	$UseDriverFallback
+	[switch]$UseDriverFallback
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -115,17 +110,14 @@ Process {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$Value,
+			[string]$Value,
 			[parameter(Mandatory = $true, HelpMessage = "Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("1", "2", "3")]
-			[string]
-			$Severity,
+			[string]$Severity,
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$FileName = "ApplyDriverPackage.log"
+			[string]$FileName = "ApplyDriverPackage.log"
 		)
 		# Determine log file location
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
@@ -155,20 +147,18 @@ Process {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$FilePath,
+			[string]$FilePath,
 			[parameter(Mandatory = $false, HelpMessage = "Specify arguments that will be passed to the executable")]
 			[ValidateNotNull()]
-			[string]
-			$Arguments
+			[string]$Arguments
 		)
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath	  = $FilePath
-			NoNewWindow   = $true
-			Passthru	  = $true
-			ErrorAction   = "Stop"
+			FilePath = $FilePath
+			NoNewWindow = $true
+			Passthru = $true
+			ErrorAction = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -195,23 +185,19 @@ Process {
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
-			[string]
-			$PackageID,
+			[string]$PackageID,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("Custom", "TSCache", "CCMCache")]
-			[string]
-			$DestinationLocationType,
+			[string]$DestinationLocationType,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$DestinationVariableName,
+			[string]$DestinationVariableName,
 			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$CustomLocationPath
+			[string]$CustomLocationPath
 		)
 		# Set OSDDownloadDownloadPackages
 		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
@@ -282,8 +268,7 @@ Process {
 			[parameter(Mandatory = $true, HelpMessage = "Specify the OS data to retrieve.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("OSImageVersion", "OSImageArchitecture")]
-			[string]
-			$OSData
+			[string]$OSData
 		)
 		$TSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
 		switch ($OSData) {
@@ -322,8 +307,7 @@ Process {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "OS architecture data to be translated.")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$InputObject
+			[string]$InputObject
 		)
 		switch ($InputObject) {
 			"9" {
@@ -349,8 +333,7 @@ Process {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Windows build version must be provided")]
 			[ValidateNotNullOrEmpty()]
-			[string]
-			$InputObject
+			[string]$InputObject
 		)
 		
 		# Get operating system name from version
