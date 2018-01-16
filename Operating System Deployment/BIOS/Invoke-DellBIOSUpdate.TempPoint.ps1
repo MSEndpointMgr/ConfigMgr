@@ -131,18 +131,15 @@ Process {
 					$FlashProcess = Start-Process -FilePath $FlashUtility -ArgumentList $FlashSwitches -Passthru -Wait -ErrorAction Stop
 					
 					# Set reboot flag if restart required determined (exit code 2)
-					if ($FlashProcess.ExitCode -match "0|2") {
+					if ($FlashProcess.ExitCode -eq 2) {
 						# Set reboot required flag
 						$TSEnvironment.Value("SMSTSBiosUpdateRebootRequired") = "True"
 						$TSEnvironment.Value("SMSTSBiosInOSUpdateRequired") = "False"
 					}
-					elseif ($FlashProcess.ExitCode -eq "10") {
-						Write-CMLogEntry -Value "Laptop is on battery power. The AC power must be connected to successfully flash the BIOS." -Severity 3; exit 1
-					}
 					else {
-						Write-CMLogEntry -Value "An error occured while updating the system BIOS during OS offline phase. Please review the log file located at $BIOSLogFile" -Severity 3; exit 1
+						$TSEnvironment.Value("SMSTSBiosUpdateRebootRequired") = "False"
+						$TSEnvironment.Value("SMSTSBiosInOSUpdateRequired") = "True"
 					}
-					
 				}
 				catch [System.Exception] {
 					Write-CMLogEntry -Value "An error occured while updating the system BIOS during OS offline phase. Error message: $($_.Exception.Message)" -Severity 3 ; exit 1
