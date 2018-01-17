@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Download BIOS package (regular package) matching computer model and manufacturer.
 .DESCRIPTION
@@ -14,15 +14,7 @@
     Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
 .EXAMPLE
     Production BIOS Packages -
-	# Detect, download and apply an available BIOS update during OS deployment with ConfigMgr (Default):
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
-
-	# Detect, download and apply an available BIOS update during OS upgrade with ConfigMgr:
-    .\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType OSUpgrade
-    
-	# Detect, download and apply an available BIOS update during OS upgrade for an existing operating system using ConfigMgr:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType BIOSUpdate    
-
+	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
 	Piloting BIOS Packages (Using V5.0.0 of the Driver  Automation Tool onwards)
 	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS Update Pilot"
 	
@@ -31,16 +23,16 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2018-01-10
+    Updated:     2017-11-23
     
     Version history:
-    1.0.0 - (2017-05-22) Script created 
-    1.0.1 - (2017-07-07) Updated with BIOS revision checker. Initially used for Dell systems 
-    1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models 
-    1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models 
-    1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value 
-	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable
-	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
+    1.0.0 - (2017-05-22) Script created (Nickolaj Andersen)
+    1.0.1 - (2017-07-07) Updated with BIOS revision checker. Initially used for Dell systems (Maurice Daly)
+    1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models (Maurice Daly)
+    1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models (Maurice Daly)
+    1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value (Maurice Daly)
+    1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable (Maurice Daly)
+    1.0.6 - (2017-11-23) Enabled HP support.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -50,9 +42,6 @@ param (
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
-	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.")]
-	[ValidateSet("BareMetal", "OSUpgrade", "BIOSUpdate")]
-	[string]$DeploymentType = "BareMetal",
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Filter = [System.String]::Empty
@@ -67,19 +56,6 @@ Begin {
 	}
 }
 Process {
-	# Set Log Path
-	switch ($DeploymentType) {
-		"OSUpgrade" {
-			$LogsDirectory = Join-Path $env:SystemRoot "Temp"
-		}
-		"BIOSUpdate" {
-			$LogsDirectory = Join-Path $env:SystemRoot "Temp"
-		}
-		default {
-			$LogsDirectory = $Script:TSEnvironment.Value("_SMSTSLogPath")
-		}
-	}
-	
 	# Functions
 	function Write-CMLogEntry {
 		param (
@@ -95,7 +71,7 @@ Process {
 			[string]$FileName = "BIOSPackageDownload.log"
 		)
 		# Determine log file location
-		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
+		$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
 		
 		# Construct time stamp for log entry
 		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
@@ -130,10 +106,10 @@ Process {
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath = $FilePath
-			NoNewWindow = $true
-			Passthru = $true
-			ErrorAction	= "Stop"
+			FilePath		 = $FilePath
+			NoNewWindow	     = $true
+			Passthru		 = $true
+			ErrorAction	     = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -195,15 +171,7 @@ Process {
 		# Invoke download of package content
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
-			
-			if (Test-Path -Path "C:\Windows\CCM\OSDDownloadContent.exe") {
-				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
-			}
-			else {
-				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
-			}
+			$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
 			
 			# Match on return code
 			if ($ReturnCode -eq 0) {
@@ -309,6 +277,7 @@ Process {
 		}
 	}
 	
+	
 	# Write log file for script execution
 	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
@@ -320,7 +289,7 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object Expand-Property SystemSKU
+			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
@@ -376,7 +345,7 @@ Process {
 	$ErrorActionPreference = "Stop"
 	
 	# Validate supported system was detected
-	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo") {
+	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo" -or $ComputerManufacturer -eq "Hewlett-Packard") {
 		# Process packages returned from web service
 		if ($Packages -ne $null) {
 			# Add packages with matching criteria to list
@@ -426,7 +395,7 @@ Process {
 							}
 						}
 						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occurred while downloading the BIOS update (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
+							Write-CMLogEntry -Value "An error occurred while downloading BIOS update (single package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 14
 						}
 					}
 					else {
@@ -445,7 +414,7 @@ Process {
 						# Attempt to find exact model match for Lenovo models which overlap model types
 						$PackageList = $PackageList | Where-object {
 							($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)
-						} | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
+						}
 						
 						If ($PackageList -eq $null) {
 							# Fall back to select the latest model type match if no model name match is found
@@ -467,25 +436,28 @@ Process {
 						elseif ($ComputerManufacturer -match "Hewlett-Packard") {
 							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
 						}
+						else {
+							Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
+						}
 						
 						if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $($PackageList[0].PackageID) -DestinationLocationType Custom -DestinationVariableName "OSDBIOSPackage" -CustomLocationPath "%_SMSTSMDataPath%\BIOSPackage"
-														
+							
 							try {
 								# Check for successful package download
 								if ($DownloadInvocation -eq 0) {
 									Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Package located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
 								}
 								else {
-									Write-CMLogEntry -Value "BIOS package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
+									Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 13
 								}
 							}
 							catch [System.Exception] {
-								Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
+								Write-CMLogEntry -Value "An error occurred while applying BIOS update (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
 							}	
 						}
 						else {
-							Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
+							Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
 						}
 					}
 					else {

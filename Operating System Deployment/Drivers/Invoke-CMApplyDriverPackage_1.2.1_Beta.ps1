@@ -95,6 +95,16 @@ Begin {
 	}
 }
 Process {
+	# Set Log Path
+	switch ($DeploymentType) {
+		"BareMetal" {
+			$LogPath = $Script:TSEnvironment.Value("_SMSTSLogPath")
+		}
+		default {
+			$LogPath = "$env:SystemRoot\Temp"
+		}
+	}
+	
 	# Functions
 	function Write-CMLogEntry {
 		param (
@@ -110,7 +120,7 @@ Process {
 			[string]$FileName = "ApplyDriverPackage.log"
 		)
 		# Determine log file location
-		$LogFilePath = Join-Path -Path $Script:TSEnvironment.Value("_SMSTSLogPath") -ChildPath $FileName
+		$LogFilePath = Join-Path -Path $LogPath -ChildPath $FileName
 		
 		# Construct time stamp for log entry
 		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
@@ -504,7 +514,7 @@ Process {
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
-									if ($DeploymentType -match "BareMetal|DriverUpdate") {
+									if ($DeploymentType -match "BareMetal") {
 										# Apply drivers recursively from downloaded driver package location
 										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($TSEnvironment.Value('OSDDriverPackage01'))" -Severity 1
 										$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDisk'))\ /Add-Driver /Driver:$($TSEnvironment.Value('OSDDriverPackage01')) /Recurse"
@@ -512,15 +522,18 @@ Process {
                                         # Validate driver injection
 										if ($ApplyDriverInvocation -eq 0) {
                                             Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
-                                            
-                                            # Update driver with pnputil.exe for DriverUpdate deployment type
-                                            if ($DeploymentType -like "DriverUpdate") {
-                                                # To be implemented
-                                            }
 										}
 										else {
 											Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Exit code: $($ApplyDriverInvocation)" -Severity 3; exit 14
                                         }
+									}
+									else {
+										# Apply drivers recursively from downloaded driver package location
+										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe" -Severity 1
+										Write-CMLogEntry -Value "Reading drivers from $($TSEnvironment.Value('OSDDriverPackage01')) " -Severity 1
+										Set-Location -Path $TSEnvironment.Value('OSDDriverPackage01')
+										$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver *.inf /subdirs /install | Out-File -FilePath (Join-Path $LogPath 'Install-Drivers.txt') -Force"
+										Set-Location -Path $PSScriptRoot
 									}
 								}
 								else {
@@ -562,15 +575,18 @@ Process {
                                         # Validate driver injection
 										if ($ApplyDriverInvocation -eq 0) {
                                             Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
-                                            
-                                            # Update driver with pnputil.exe for DriverUpdate deployment type
-                                            if ($DeploymentType -like "DriverUpdate") {
-                                                # To be implemented
-                                            }
 										}
 										else {
 											Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Exit code: $($ApplyDriverInvocation)" -Severity 3; exit 15
 										}
+									}
+									else {
+										# Apply drivers recursively from downloaded driver package location
+										Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe" -Severity 1
+										Write-CMLogEntry -Value "Reading drivers from $($TSEnvironment.Value('OSDDriverPackage01')) " -Severity 1
+										Set-Location -Path $TSEnvironment.Value('OSDDriverPackage01')
+										$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver *.inf /subdirs /install | Out-File -FilePath (Join-Path $LogPath 'Install-Drivers.txt') -Force"
+										Set-Location -Path $PSScriptRoot
 									}
 								}
 								else {
