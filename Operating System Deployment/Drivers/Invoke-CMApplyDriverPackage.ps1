@@ -64,6 +64,7 @@
     1.2.1 - (2018-01-03) IMPORTANT - OSMaintenance switch has been replaced by the DeploymentType parameter. In order to support the default behavior (BareMetal), OSUpgrade and DriverUpdate operational
                          modes for the script, this change was required. Update your task sequence configuration before you use this update.
 	2.0.0 - (2018-01-10) Updates include support for machines with blank system SKU values and the ability to run BIOS & driver updates in the FULL OS
+	2.0.1 - (2018-01-18) Fixed a regex issue when attempting to fallback to computer model instead of SystemSKU
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -464,7 +465,7 @@ Process {
 			# Process packages returned from web service
 			if ($Packages -ne $null) {
 				if ([System.String]::IsNullOrEmpty($SystemSKU)) {
-					$ComputerDetectionMethod = "^$($ComputerModel)$"
+					$ComputerDetectionMethod = $ComputerModel
 				}
 				else {
 					$ComputerDetectionMethod = $SystemSKU
@@ -472,7 +473,7 @@ Process {
 				}
 				foreach ($Package in $Packages) {
 					# Match model (using SystemSKU), manufacturer, operating system name and architecture criteria
-					if (($Package.PackageDescription -match $ComputerDetectionMethod) -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+					if (($Package.PackageDescription -match "^$($ComputerDetectionMethod)$" -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 						# Match operating system criteria per manufacturer for Windows 10 packages only
 						if ($OSName -like "Windows 10") {
 							switch ($ComputerManufacturer) {
