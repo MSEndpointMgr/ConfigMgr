@@ -473,7 +473,7 @@ Process {
 				}
 				foreach ($Package in $Packages) {
 					# Match model (using SystemSKU), manufacturer, operating system name and architecture criteria
-					if (($Package.PackageDescription -match "^$($ComputerDetectionMethod)$" -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+					if (($Package.PackageDescription -match "^$($ComputerDetectionMethod)$") -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
 						# Match operating system criteria per manufacturer for Windows 10 packages only
 						if ($OSName -like "Windows 10") {
 							switch ($ComputerManufacturer) {
