@@ -13,29 +13,35 @@
 	
 .PARAMETER SecretKey
 	Specify the known secret key for the ConfigMgr WebService.
+
+.PARAMETER DeploymentType
+	Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.	
 	
 .PARAMETER Filter
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
+
+.PARAMETER UseDriverFallback
+	Specify if the script is to be used with a driver fallback package.
 
 .EXAMPLE
 	# Detect, download and apply drivers during OS deployment with ConfigMgr:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
 
+	# Detect, download and apply drivers during OS deployment with ConfigMgr and use a driver fallback package:
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -UseDriverFallback	
+
 	# Detect and download drivers during OS upgrade with ConfigMgr:
     .\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType OSUpgrade
     
-	# Detect, download and inject latest drivers for an existing operating system using ConfigMgr:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType DriverUpdate    
-
-	# Detect the OS and use a driver fallback package with ConfigMgr:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -UseDriverFallback
+	# Detect, download and update with latest drivers for an existing operating system using ConfigMgr:
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType DriverUpdate
 	
 .NOTES
     FileName:    Invoke-CMApplyDriverPackage.ps1
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2018-01-10
+    Updated:     2018-01-24
 	
     Minimum required version of ConfigMgr WebService: 1.5.0
     
@@ -65,21 +71,26 @@
                          modes for the script, this change was required. Update your task sequence configuration before you use this update.
 	2.0.0 - (2018-01-10) Updates include support for machines with blank system SKU values and the ability to run BIOS & driver updates in the FULL OS
 	2.0.1 - (2018-01-18) Fixed a regex issue when attempting to fallback to computer model instead of SystemSKU
+	2.0.2 - (2018-01-24) Re-constructed the logic for matching driver package to begin with computer model or SystemSKU (SystemSKU takes precedence before computer model) and improved the logging when matching for driver packages
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
 	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$URI,
+
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
+
 	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.")]
 	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate")]
 	[string]$DeploymentType = "BareMetal",
+
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Filter = ([System.String]::Empty),
+
 	[parameter(Mandatory = $false, HelpMessage = "Specify if the script is to be used with a driver fallback package")]
 	[switch]$UseDriverFallback
 )
@@ -465,47 +476,70 @@ Process {
 			# Process packages returned from web service
 			if ($Packages -ne $null) {
 				if ([System.String]::IsNullOrEmpty($SystemSKU)) {
-					$ComputerDetectionMethod = $ComputerModel
+					$ComputerDetectionMethod = "ComputerModel"
 				}
 				else {
-					$ComputerDetectionMethod = $SystemSKU
-					
+					$ComputerDetectionMethod = "SystemSKU"
 				}
 				foreach ($Package in $Packages) {
-					# Match model (using SystemSKU), manufacturer, operating system name and architecture criteria
-					if (($Package.PackageDescription -match "^$($ComputerDetectionMethod)$") -and ($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
-						# Match operating system criteria per manufacturer for Windows 10 packages only
-						if ($OSName -like "Windows 10") {
-							switch ($ComputerManufacturer) {
-								"Hewlett-Packard" {
-									if ($Package.PackageName -match ([System.Version]$OSImageVersion).Build) {
-										$MatchFound = $true
+					Write-CMLogEntry -Value "Attempting to find a match for driver package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+
+					# Computer detection method matching
+					$ComputerDetectionResult = $false
+					switch ($ComputerDetectionMethod) {
+						"ComputerModel" {
+							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {
+								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
+								$ComputerDetectionResult = $true
+							}
+						}
+						"SystemSKU" {
+							if ($Package.PackageDescription -match $SystemSKU) {
+								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 1
+								$ComputerDetectionResult = $true
+							}
+						}
+					}
+
+					# Match manufacturer, operating system name and architecture criteria
+					if ($ComputerDetectionResult -eq $true) {
+						if (($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+							# Match operating system criteria per manufacturer for Windows 10 packages only
+							if ($OSName -like "Windows 10") {
+								switch ($ComputerManufacturer) {
+									"Hewlett-Packard" {
+										if ($Package.PackageName -match ([System.Version]$OSImageVersion).Build) {
+											$MatchFound = $true
+										}
 									}
-								}
-								"Microsoft" {
-									if ($Package.PackageName -match $OSImageVersion) {
-										$MatchFound = $true
+									"Microsoft" {
+										if ($Package.PackageName -match $OSImageVersion) {
+											$MatchFound = $true
+										}
 									}
-								}
-								Default {
-									if ($Package.PackageName -match $OSName) {
-										$MatchFound = $true
+									Default {
+										if ($Package.PackageName -match $OSName) {
+											$MatchFound = $true
+										}
 									}
 								}
 							}
+							else {
+								$MatchFound = $true
+							}
+							
+							# Add package to list if match is found
+							if ($MatchFound -eq $true) {
+								Write-CMLogEntry -Value "Match found for manufacturer, operating system and architecture: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+								$PackageList.Add($Package) | Out-Null
+							}
 						}
 						else {
-							$MatchFound = $true
-						}
-						# Add package to list if match is found
-						if ($MatchFound -eq $true) {
-							Write-CMLogEntry -Value "Match found for computer model, manufacturer and operating system: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
-							$PackageList.Add($Package) | Out-Null
+							Write-CMLogEntry -Value "Package does not meet computer model, manufacturer and operating system and architecture criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 						}
 					}
 					else {
-						$MatchFound = $false
-						Write-CMLogEntry -Value "Package does not meet computer model, manufacturer and operating system criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+						Write-CMLogEntry -Value "Package does not meet computer model criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 					}
 				}
 				# Process matching items in package list and set task sequence variable
