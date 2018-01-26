@@ -552,7 +552,7 @@ Process {
 
 						# Process driver package list in reverse
 						for ($i = ($PackageList.Count-1); $i -ge 0; $i--) {
-							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -notmatch $ComputerModel) {
+							if ($PackageList[$i].PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -notmatch $ComputerModel) {
 								Write-CMLogEntry -Value "Removing driver package matching SystemSKU but not computer model: $($PackageList[$i].PackageName)" -Severity 1
 								$PackageList.RemoveAt($i)
 							}
