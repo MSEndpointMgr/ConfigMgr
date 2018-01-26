@@ -74,6 +74,7 @@
 	2.0.2 - (2018-01-24) Re-constructed the logic for matching driver package to begin with computer model or SystemSKU (SystemSKU takes precedence before computer model) and improved the logging when matching for driver packages
 	2.0.3 - (2018-01-25) Added a fix for multiple manufacturer package matches not working for Windows 7. Fixed an issue where SystemSKU was used and multiple driver packages matched. Added script line logging when the script cought an exception.
 	2.0.4 - (2018-01-26) Changed from using a foreach loop to a for loop in reverse to remove driver packages that was matched by SystemSKU but does not match the computer model
+	2.0.5 - (2018-01-26) Added validation on web service returns and enhanced logging for the package selection process.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -150,7 +151,7 @@ Process {
 		
 		# Add value to log file
 		try {
-			Add-Content -Value $LogText -LiteralPath $LogFilePath -ErrorAction Stop
+			Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
 		}
 		catch [System.Exception] {
 			Write-Warning -Message "Unable to append log entry to ApplyDriverPackage.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
@@ -291,7 +292,15 @@ Process {
 				Write-CMLogEntry -Value "Attempting to detect OSImageVersion property from task sequence, running in DeploymentType: $($DeploymentType)" -Severity 1
 				try {
 					$OSImageVersion = $WebService.GetCMOSImageVersionForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
-					Write-CMLogEntry -Value "Retrieved OSImageVersion from web service: $($OSImageVersion)" -Severity 1
+
+                    #Validate that the web service returned something.                                        				
+                    if ([System.String]::IsNullOrEmpty($OSImageVersion)){
+                        Write-CMLogEntry -Value "The GetCMOSImageVersionForTaskSequence call from the web service failed to return a value for TS ID: $($TSPackageID)" -Severity 3; exit 3                        
+                    }
+                    else{
+                        Write-CMLogEntry -Value "Retrieved OSImageVersion from web service: $($OSImageVersion)" -Severity 1                        
+                    }					
+
 					
 					# Handle return value from function
 					return $OSImageVersion
@@ -305,7 +314,14 @@ Process {
 				Write-CMLogEntry -Value "Attempting to detect OSImageArchitecture property from task sequence, running in DeploymentType: $($DeploymentType)" -Severity 1
 				try {
 					$OSImageArchitecture = $WebService.GetCMOSImageArchitectureForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
-					Write-CMLogEntry -Value "Retrieved OSImageArchitecture from web service: $($OSImageArchitecture)" -Severity 1
+
+                    #Validate that the web service returned something.
+					if ([System.String]::IsNullOrEmpty($OSImageArchitecture)){
+                        Write-CMLogEntry -Value "The GetCMOSImageArchitectureForTaskSequence call from the web service failed to return a value for the TS ID : $($TSPackageID)" -Severity 3; exit 3
+                    }
+                    else{
+                        Write-CMLogEntry -Value "Retrieved OSImageArchitecture from web service: $($OSImageArchitecture)" -Severity 1
+                    }
 					
 					# Handle return value from function
 					return $OSImageArchitecture
@@ -427,7 +443,13 @@ Process {
 	# Call web service for a list of packages
 	try {
 		$Packages = $WebService.GetCMPackage($SecretKey, $Filter)
-		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
+		        
+        if ([string]::IsNullOrEmpty($Packages)) {
+            Write-CMLogEntry -Value "Failed to retrieve driver packages from web service." -Severity 3 ; exit 3
+        }
+        else {
+        		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
+        }
 	}
 	catch [System.Exception] {
 		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 2
@@ -483,21 +505,21 @@ Process {
 				else {
 					$ComputerDetectionMethod = "SystemSKU"
 				}
-				foreach ($Package in $Packages) {
-					Write-CMLogEntry -Value "Attempting to find a match for driver package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+
+				Write-CMLogEntry -Value "Attempting to find matching driver packages." -Severity 1
+
+				foreach ($Package in $Packages) {					
 
 					# Computer detection method matching
 					$ComputerDetectionResult = $false
 					switch ($ComputerDetectionMethod) {
 						"ComputerModel" {
-							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {
-								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
+							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {								
 								$ComputerDetectionResult = $true
 							}
 						}
 						"SystemSKU" {
-							if ($Package.PackageDescription -match $SystemSKU) {
-								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 1
+							if ($Package.PackageDescription -match $SystemSKU) {								
 								$ComputerDetectionResult = $true
 							}
 						}
@@ -505,7 +527,16 @@ Process {
 
 					# Match manufacturer, operating system name and architecture criteria
 					if ($ComputerDetectionResult -eq $true) {
-						if (($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+						if ($ComputerManufacturer -notmatch $Package.PackageManufacturer){
+							Write-CMLogEntry -Value "Package does not match the computer manufacturer ($($ComputerManufacturer)): $($Package.PackageName) ($($Package.PackageID))." -Severity 2
+						}
+						elseif ($Package.PackageName -notmatch $OSName) {
+							Write-CMLogEntry -Value "Package does not match the operating system ($($OSName)): $($Package.PackageName) ($($Package.PackageID))." -Severity 2
+						}
+						elseif ($Package.PackageName -notmatch $OSImageArchitecture){
+							Write-CMLogEntry -Value "Package does not match the operating system architecture ($($OSImageArchitecture)): $($Package.PackageName) ($($Package.PackageID))." -Severity 2
+						}
+						else {
 							# Match operating system criteria per manufacturer for Windows 10 packages only
 							if ($OSName -like "Windows 10") {
 								switch ($ComputerManufacturer) {
@@ -536,12 +567,9 @@ Process {
 								$PackageList.Add($Package) | Out-Null
 							}
 						}
-						else {
-							Write-CMLogEntry -Value "Driver package does not meet computer model, manufacturer and operating system and architecture criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
-						}
 					}
 					else {
-						Write-CMLogEntry -Value "Driver package does not meet computer model criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+						Write-CMLogEntry -Value "Package does not meet $($ComputerDetectionMethod) criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 					}
 				}
 				# Process matching items in package list
@@ -563,9 +591,8 @@ Process {
 					if ($PackageList.Count -eq 1) {
 						try {
 							# Attempt to download driver package content
-							Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
+							Write-CMLogEntry -Value "Driver package list contains a single match. Attempting to download content for package '$($PackageList[0].PackageName) ($($PackageList[0].PackageID))'." -Severity 1
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-							Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
@@ -603,7 +630,7 @@ Process {
 					}
 					elseif ($PackageList.Count -ge 2) {
 						try {
-							Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based up latest package creation date" -Severity 1
+							Write-CMLogEntry -Value "Driver package list contains $($PackageList.Count) matches, attempting to download driver package content based up latest package creation date." -Severity 1
 							
 							# Determine matching driver package from array list with vendor specific solutions
 							if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
@@ -617,8 +644,8 @@ Process {
 							# Validate that there's a package available for download
 							if ($Package -ne $null) {
 								# Attempt to download driver package content
+								Write-CMLogEntry -Value "Attempting to download content for package '$($Package.PackageName) ($($Package.PackageID))'" -Severity 1
 								$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-								Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
 								
 								try {
 									if ($DownloadInvocation -eq 0) {
