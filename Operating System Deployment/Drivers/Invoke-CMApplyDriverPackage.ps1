@@ -41,7 +41,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2018-01-25
+    Updated:     2018-01-26
 	
     Minimum required version of ConfigMgr WebService: 1.5.0
     
@@ -73,6 +73,7 @@
 	2.0.1 - (2018-01-18) Fixed a regex issue when attempting to fallback to computer model instead of SystemSKU
 	2.0.2 - (2018-01-24) Re-constructed the logic for matching driver package to begin with computer model or SystemSKU (SystemSKU takes precedence before computer model) and improved the logging when matching for driver packages
 	2.0.3 - (2018-01-25) Added a fix for multiple manufacturer package matches not working for Windows 7. Fixed an issue where SystemSKU was used and multiple driver packages matched. Added script line logging when the script cought an exception.
+	2.0.4 - (2018-01-26) Changed from using a foreach loop to a for loop in reverse to remove driver packages that was matched by SystemSKU but does not match the computer model
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -549,10 +550,11 @@ Process {
 					if (($ComputerDetectionMethod -like "SystemSKU") -and ($PackageList.Count -ge 2)) {
 						Write-CMLogEntry -Value "Driver package list contains $($PackageList.Count) matches. Atempting to remove driver packages that do not match the computer model." -Severity 1
 
-						foreach ($Package in $PackageList) {
+						# Process driver package list in reverse
+						for ($i = ($PackageList.Count-1); $i -ge 0; $i--) {
 							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -notmatch $ComputerModel) {
-								Write-CMLogEntry -Value "Removing driver package matching SystemSKU but not computer model:" -Severity 1
-								$PackageList.Remove($Package)
+								Write-CMLogEntry -Value "Removing driver package matching SystemSKU but not computer model: $($PackageList[$i].PackageName)" -Severity 1
+								$PackageList.RemoveAt($i)
 							}
 						}
 					}
