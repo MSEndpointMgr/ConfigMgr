@@ -58,7 +58,7 @@ function Write-CMLogEntry {
 	
 	# Add value to log file
 	try {
-		Add-Content -Value $LogText -LiteralPath $LogFilePath -ErrorAction Stop
+		Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop 
 	} catch [System.Exception] {
 		Write-Warning -Message "Unable to append log entry to ApplyDriverMaintenancePackage.log file. Error message: $($_.Exception.Message)"
 	}
