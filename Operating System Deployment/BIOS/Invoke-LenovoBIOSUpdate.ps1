@@ -16,11 +16,12 @@
     Author:      Maurice Daly
     Contact:     @modaly_it
     Created:     2017-06-09
-    Updated:     2017-06-12
+    Updated:     2018-01-29
     
     Version history:
     1.0.0 - (2017-06-09) Script created
 	1.0.1 - (2017-07-05) Added additional logging, methods and variables
+	1.0.2 - (2018-01-29) Changed condition for the password switches
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
