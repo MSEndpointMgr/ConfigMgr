@@ -33,16 +33,15 @@ param (
 	
 	[parameter(Mandatory = $true, HelpMessage = "Specify the path containing the HPBIOSUPDREC executable and bios update *.bin -file.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$Path,
+	[string]$Path,
+
 	[parameter(Mandatory = $false, HelpMessage = "Specify the BIOS password filename if necessary (save the password file to the same directory as the script).")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$PasswordBin,
+	[string]$PasswordBin,
+	
 	[parameter(Mandatory = $false, HelpMessage = "Set the name of the log file produced by the flash utility.")]
 	[ValidateNotNullOrEmpty()]
-	[string]
-	$LogFileName = "HPFlashBIOSUpdate.log"	
+	[string]$LogFileName = "HPFlashBIOSUpdate.log"	
 )
 
 Begin {	
