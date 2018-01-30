@@ -285,7 +285,7 @@ Process {
 		
 		if ($ComputerManufacturer -match "Lenovo") {
 			# Obtain current BIOS release
-			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select -Property *).ReleaseDate).SubString(0, 8)
+			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select-Object -Property *).ReleaseDate).SubString(0, 8)
 			Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
 			Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
 			
@@ -299,7 +299,7 @@ Process {
 		
 		if ($ComputerManufacturer -match "Hewlett-Packard") {
 			# Obtain current BIOS release
-			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select -Property *)
+			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select-Object -Property *)
 			$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
 			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			
