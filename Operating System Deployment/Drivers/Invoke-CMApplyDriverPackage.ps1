@@ -8,8 +8,8 @@
     to include the PackageID property of a package matching the computer model. If multiple packages are detect, it will select
 	most current one by the creation date of the packages.
 	
-.PARAMETER URI
-	Set the URI for the ConfigMgr WebService.
+.PARAMETER Servers
+	A string array of FQDNs that are running the web service deliminated by commas. If not specified then management points will be used instead.
 	
 .PARAMETER SecretKey
 	Specify the known secret key for the ConfigMgr WebService.
@@ -25,23 +25,23 @@
 
 .EXAMPLE
 	# Detect, download and apply drivers during OS deployment with ConfigMgr:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
+	.\Invoke-CMApplyDriverPackage.ps1 -Servers "CM01.domain.com" -SecretKey "12345" -Filter "Drivers"
 
 	# Detect, download and apply drivers during OS deployment with ConfigMgr and use a driver fallback package:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -UseDriverFallback	
+	.\Invoke-CMApplyDriverPackage.ps1 -Servers "CM01.domain.com,CM02.domain.com,CM03.domain.com" -SecretKey "12345" -Filter "Drivers" -UseDriverFallback	
 
 	# Detect and download drivers during OS upgrade with ConfigMgr:
-    .\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType OSUpgrade
+    .\Invoke-CMApplyDriverPackage.ps1 -SecretKey "12345" -Filter "Drivers" -DeploymentType OSUpgrade
     
 	# Detect, download and update with latest drivers for an existing operating system using ConfigMgr:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType DriverUpdate
+	.\Invoke-CMApplyDriverPackage.ps1 -SecretKey "12345" -Filter "Drivers" -DeploymentType DriverUpdate
 	
 .NOTES
     FileName:    Invoke-CMApplyDriverPackage.ps1
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2018-01-29
+    Updated:     2018-01-31
 	
     Minimum required version of ConfigMgr WebService: 1.5.0
     
@@ -75,12 +75,12 @@
 	2.0.3 - (2018-01-25) Added a fix for multiple manufacturer package matches not working for Windows 7. Fixed an issue where SystemSKU was used and multiple driver packages matched. Added script line logging when the script cought an exception.
 	2.0.4 - (2018-01-26) Changed from using a foreach loop to a for loop in reverse to remove driver packages that was matched by SystemSKU but does not match the computer model
 	2.0.5 - (2018-01-29) Replaced Add-Content with Out-File for issue with file lock causing not all log entries to be written to the ApplyDriverPackage.log file
+	2.0.6 - (2018-01-31) Added validation on web service returns, enhance logging for the package selection process, fix logging directory and formatting issues, support web service high availability.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
-	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
-	[ValidateNotNullOrEmpty()]
-	[string]$URI,
+	[parameter(HelpMessage = "Specify one or more FQDNs of servers running the ConfigMgr WebService.  Separate multiple servers with commas or leave blank to use mananagement points.")]
+	[string[]]$Servers,
 
 	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[ValidateNotNullOrEmpty()]
@@ -138,7 +138,7 @@ Process {
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
 		
 		# Construct time stamp for log entry
-		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
+		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"),"", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
 		
 		# Construct date for log entry
 		$Date = (Get-Date -Format "MM-dd-yyyy")
@@ -292,7 +292,15 @@ Process {
 				Write-CMLogEntry -Value "Attempting to detect OSImageVersion property from task sequence, running in DeploymentType: $($DeploymentType)" -Severity 1
 				try {
 					$OSImageVersion = $WebService.GetCMOSImageVersionForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
-					Write-CMLogEntry -Value "Retrieved OSImageVersion from web service: $($OSImageVersion)" -Severity 1
+
+                    #Validate that the web service returned something.                                        				
+                    if ([System.String]::IsNullOrEmpty($OSImageVersion)){
+                        Write-CMLogEntry -Value "The GetCMOSImageVersionForTaskSequence call from the web service failed to return a value for TS ID: $($TSPackageID)" -Severity 3; exit 3                        
+                    }
+                    else{
+                        Write-CMLogEntry -Value "Retrieved OSImageVersion from web service: $($OSImageVersion)" -Severity 1                        
+                    }					
+
 					
 					# Handle return value from function
 					return $OSImageVersion
@@ -306,7 +314,14 @@ Process {
 				Write-CMLogEntry -Value "Attempting to detect OSImageArchitecture property from task sequence, running in DeploymentType: $($DeploymentType)" -Severity 1
 				try {
 					$OSImageArchitecture = $WebService.GetCMOSImageArchitectureForTaskSequence($SecretKey, $TSPackageID) | Sort-Object -Descending | Select-Object -First 1
-					Write-CMLogEntry -Value "Retrieved OSImageArchitecture from web service: $($OSImageArchitecture)" -Severity 1
+
+                    #Validate that the web service returned something.
+					if ([System.String]::IsNullOrEmpty($OSImageArchitecture)){
+                        Write-CMLogEntry -Value "The GetCMOSImageArchitectureForTaskSequence call from the web service failed to return a value for the TS ID : $($TSPackageID)" -Severity 3; exit 3
+                    }
+                    else{
+                        Write-CMLogEntry -Value "Retrieved OSImageArchitecture from web service: $($OSImageArchitecture)" -Severity 1
+                    }
 					
 					# Handle return value from function
 					return $OSImageArchitecture
@@ -369,6 +384,73 @@ Process {
 		return $OSName
 	}
 	
+	function Connect-WebService {
+		param (
+			[parameter(HelpMessage = "Specify one or more FQDNs of servers running the ConfigMgr WebService.  Separate multiple servers with commas or leave blank to use mananagement points.")]
+			[string[]]$Servers,
+			[parameter(HelpMessage = "URL of a management point.")]
+			[string[]]$ManagementPoint
+		)
+		$WebService=$null
+		$webServiceURLTemplate="http://%server%/ConfigMgrWebService/ConfigMgr.asmx"
+
+		#If no servers were listed then get the list of management points from either WMI or the passed in management point.
+		if ($Servers -eq $null)
+		{
+			#If no MP was given then try to grab it from the TS variables.
+			if ($ManagementPoint -eq $null){
+				#If the TSEnvironment hasn't been retrieved try doing so.  Note: New-Object doesn't honor ErrorAction so a try/catch is used.
+				if ($TSEnvironment -eq $null){
+					try{$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment} catch{}
+				}
+				if ($TSEnvironment -ne $null){
+					$ManagementPoint=$TSEnvironment.Value("_SMSTSMP")
+				}
+			}
+
+			#If no MP then try to grab the list of MP from WMI.  Otherwise just use the MP given.
+			if ($ManagementPoint -eq $null){
+				Write-CMLogEntry -Value "No server was passed in. Trying to get list of management points from WMI." -Severity 1
+				$Servers = (Get-WMIObject -Class SMS_LookupMP -Namespace "root\ccm" -ErrorAction SilentlyContinue).Name
+			}
+			else{
+				Write-CMLogEntry -Value "No server was passed in. Trying to get list of management points from the management point: $($ManagementPoint)." -Severity 1
+				if ($ManagementPoint -notmatch "http"){$ManagementPoint="http://$($ManagementPoint)"}
+				$Servers = ([xml](Invoke-WebRequest -usebasicparsing "$($ManagementPoint)/sms_mp/.sms_aut?mplist")).MPList.MP.FQDN
+			}
+		}
+		#If a single item was given and it has commas then split it up.
+		elseif (($Servers.Count -eq 1) -and ($Servers -like ",")){
+			Write-CMLogEntry -Value "Multiple servers were passed in. Trying to split them based on commas." -Severity 1
+			$Servers = $Servers.Split(",")
+		}
+
+		#Verify that one or more servers have been determined.
+		if($Servers -eq $null){
+			Write-CMLogEntry -Value "Unable to determine a list of servers." -Severity 3
+			return $null
+		}
+
+		#Randomize the list of servers.  This isn't load balancing ... but it's close enough.
+		$Servers = $Servers | Sort-Object {Get-Random}
+
+		#Try each server to find one with the web service running.
+		foreach ($server in $Servers) {
+
+			$webServiceURL=$webServiceURLTemplate.Replace("%server%", $server)
+			$WebService=New-WebServiceProxy –Uri $webServiceURL -ErrorAction SilentlyContinue
+			if ($WebService -eq $null){
+				Write-CMLogEntry -Value "Could not connect to web service URL '$($webServiceURL)': $($Error[0])" -Severity 2
+			}
+			else{
+				Write-CMLogEntry -Value "Connected to web service at $($webServiceURL)." -Severity 1
+				break
+			}
+		}
+
+		return $WebService
+	}
+
 	# Write log file for script execution
 	Write-CMLogEntry -Value "Driver download package process initiated" -Severity 1
 	
@@ -416,24 +498,28 @@ Process {
 	
 	# Set script error preference variable
 	$ErrorActionPreference = "Stop"
-	
-	# Construct new web service proxy
-	try {
-		$WebService = New-WebServiceProxy -Uri $URI -ErrorAction Stop
-	}
-	catch [System.Exception] {
-		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 1
+
+	#Connect to the web service.
+	$WebService = Connect-WebService -Servers $Servers
+	if ($WebService -eq $null){
+		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService." -Severity 3; exit 3
 	}
 	
 	# Call web service for a list of packages
 	try {
 		$Packages = $WebService.GetCMPackage($SecretKey, $Filter)
-		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
+
+		if ([string]::IsNullOrEmpty($Packages)) {
+			Write-CMLogEntry -Value "Failed to retrieve driver packages from web service." -Severity 3 ; exit 3
+		}
+		else {
+			Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
+		}
 	}
 	catch [System.Exception] {
 		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 2
 	}
-	
+
 	# Based upon deployment type, determine how to detect the OS image version property, either from the OS defined in the running task sequence or from the running operating system
 	switch ($DeploymentType) {
 		"BareMetal" {
@@ -484,21 +570,21 @@ Process {
 				else {
 					$ComputerDetectionMethod = "SystemSKU"
 				}
-				foreach ($Package in $Packages) {
-					Write-CMLogEntry -Value "Attempting to find a match for driver package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+
+				Write-CMLogEntry -Value "Attempting to find matching driver packages." -Severity 1
+
+				foreach ($Package in $Packages) {					
 
 					# Computer detection method matching
 					$ComputerDetectionResult = $false
 					switch ($ComputerDetectionMethod) {
 						"ComputerModel" {
-							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {
-								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
+							if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {								
 								$ComputerDetectionResult = $true
 							}
 						}
 						"SystemSKU" {
-							if ($Package.PackageDescription -match $SystemSKU) {
-								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 1
+							if ($Package.PackageDescription -match $SystemSKU) {								
 								$ComputerDetectionResult = $true
 							}
 						}
@@ -506,7 +592,16 @@ Process {
 
 					# Match manufacturer, operating system name and architecture criteria
 					if ($ComputerDetectionResult -eq $true) {
-						if (($ComputerManufacturer -match $Package.PackageManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+						if ($ComputerManufacturer -notmatch $Package.PackageManufacturer){
+							Write-CMLogEntry -Value "Package does not match the computer manufacturer ($($ComputerManufacturer)): $($Package.PackageName) ($($Package.PackageID))." -Severity 2
+						}
+						elseif ($Package.PackageName -notmatch $OSName) {
+							Write-CMLogEntry -Value "Package does not match the operating system ($($OSName)): $($Package.PackageName) ($($Package.PackageID))." -Severity 2
+						}
+						elseif ($Package.PackageName -notmatch $OSImageArchitecture){
+							Write-CMLogEntry -Value "Package does not match the operating system architecture ($($OSImageArchitecture)): $($Package.PackageName) ($($Package.PackageID))." -Severity 2
+						}
+						else {
 							# Match operating system criteria per manufacturer for Windows 10 packages only
 							if ($OSName -like "Windows 10") {
 								switch ($ComputerManufacturer) {
@@ -537,12 +632,9 @@ Process {
 								$PackageList.Add($Package) | Out-Null
 							}
 						}
-						else {
-							Write-CMLogEntry -Value "Driver package does not meet computer model, manufacturer and operating system and architecture criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
-						}
 					}
 					else {
-						Write-CMLogEntry -Value "Driver package does not meet computer model criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+						Write-CMLogEntry -Value "Package does not meet $($ComputerDetectionMethod) criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 					}
 				}
 				# Process matching items in package list
@@ -564,9 +656,8 @@ Process {
 					if ($PackageList.Count -eq 1) {
 						try {
 							# Attempt to download driver package content
-							Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
+							Write-CMLogEntry -Value "Driver package list contains a single match. Attempting to download content for package '$($PackageList[0].PackageName) ($($PackageList[0].PackageID))'." -Severity 1
 							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-							Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
 							
 							try {
 								if ($DownloadInvocation -eq 0) {
@@ -604,7 +695,7 @@ Process {
 					}
 					elseif ($PackageList.Count -ge 2) {
 						try {
-							Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based up latest package creation date" -Severity 1
+							Write-CMLogEntry -Value "Driver package list contains $($PackageList.Count) matches, attempting to download driver package content based up latest package creation date." -Severity 1
 							
 							# Determine matching driver package from array list with vendor specific solutions
 							if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
@@ -618,8 +709,8 @@ Process {
 							# Validate that there's a package available for download
 							if ($Package -ne $null) {
 								# Attempt to download driver package content
+								Write-CMLogEntry -Value "Attempting to download content for package '$($Package.PackageName) ($($Package.PackageID))'" -Severity 1
 								$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-								Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
 								
 								try {
 									if ($DownloadInvocation -eq 0) {
