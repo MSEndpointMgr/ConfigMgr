@@ -41,6 +41,7 @@
     1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value 
 	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable
 	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
+	2.0.1 - (2018-02-06) Fix for Hewlett Packard systems
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -379,7 +380,7 @@ Process {
 	$ErrorActionPreference = "Stop"
 	
 	# Validate supported system was detected
-	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo") {
+	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo" -or $ComputerManufacturer -eq "Hewlett-Packard") {
 		# Process packages returned from web service
 		if ($Packages -ne $null) {
 			# Add packages with matching criteria to list
