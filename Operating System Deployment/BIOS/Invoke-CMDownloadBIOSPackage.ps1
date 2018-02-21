@@ -41,6 +41,7 @@
     1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value 
 	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable
 	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
+	2.0.1 - (2018-02-06) Fix for Hewlett Packard systems
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -285,7 +286,7 @@ Process {
 		
 		if ($ComputerManufacturer -match "Lenovo") {
 			# Obtain current BIOS release
-			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select -Property *).ReleaseDate).SubString(0, 8)
+			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select-Object -Property *).ReleaseDate).SubString(0, 8)
 			Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
 			Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
 			
@@ -299,7 +300,7 @@ Process {
 		
 		if ($ComputerManufacturer -match "Hewlett-Packard") {
 			# Obtain current BIOS release
-			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select -Property *)
+			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select-Object -Property *)
 			$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
 			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			
@@ -323,7 +324,7 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object Expand-Property SystemSKU
+			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
@@ -379,7 +380,7 @@ Process {
 	$ErrorActionPreference = "Stop"
 	
 	# Validate supported system was detected
-	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo") {
+	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo" -or $ComputerManufacturer -eq "Hewlett-Packard") {
 		# Process packages returned from web service
 		if ($Packages -ne $null) {
 			# Add packages with matching criteria to list
