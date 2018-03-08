@@ -15,7 +15,7 @@
     Set the name of the log file produced by the flash utility.
 
 .EXAMPLE
-    .\Invoke-HPBIOSUpdate.ps1 -Path %HPBIOSFiles% -PasswordBin "Password.bin"
+    .\Invoke-HPBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -PasswordBin "Password.bin"
 
 .NOTES
     FileName:    Invoke-HPBIOSUpdate.ps1
