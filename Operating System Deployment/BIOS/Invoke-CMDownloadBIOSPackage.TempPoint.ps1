@@ -41,8 +41,7 @@
     1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value 
 	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable
 	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
-	2.0.1 - (2018-02-06) Fix for Hewlett Packard 
-	2.0.2 - (2018-03-13) Added version info in the log file and output of SKU value for troubleshooting purposes
+	2.0.1 - (2018-02-06) Fix for Hewlett Packard systems
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -315,7 +314,6 @@ Process {
 	}
 	
 	# Write log file for script execution
-	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version 2.0.2"
 	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
 	# Determine manufacturer
@@ -350,7 +348,6 @@ Process {
 		}
 	}
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
-	Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
 	
 	# Supported Manufacturer Array
 	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo")
