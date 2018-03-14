@@ -30,7 +30,8 @@
     Version history:
 	1.0.0 - (2017-09-05) Script created
 	1.0.1 - (2018-01-30) Updated encrypted volume check and cleaned up some logging messages
-	1.0.2 - (2018-03-13) Updated combability for older HP models & fix manage-bde driveletter
+	1.0.2 - (2018-03-13) Updated compatibility for older HP models & fix manage-bde driveletter
+	1.0.3 - (2018-03-14) 32bit compatibility...
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -119,7 +120,16 @@ Process {
 		}
 	}
 	else {
-		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC.exe" -or $_.Name -like "HPQFlash.exe" } | Select-Object -ExpandProperty FullName -First 1
+		# Try 1.
+		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "hpqRun.exe" } | Select-Object -ExpandProperty FullName | Select-Object -First 1
+		# Try 2.
+		if (!$HPBIOSUPDUtil) {
+			$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC.exe" } | Select-Object -ExpandProperty FullName -First 1
+		}
+		# Try 3.
+		if (!$HPBIOSUPDUtil) {
+			$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPQFlash.exe" } | Select-Object -ExpandProperty FullName -First 1
+		}
 	}
 
 	if ($HPBIOSUPDUtil -ne $null) {	
