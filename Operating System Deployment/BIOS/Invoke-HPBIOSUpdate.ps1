@@ -6,10 +6,13 @@
     This script will invoke the HP BIOS update process for the executable residing in the path specified for the Path parameter.
 
 .PARAMETER Path
-    Specify the path containing the HPBIOSUPDREC executable and bios update *.bin -file.
+    Specify the path containing the HPBIOSUPDREC or HPQFlash executable and bios update *.bin -file.
 
 .PARAMETER PasswordBin
-    Specify the BIOS password file if necessary (save the password file to the same directory as the script).
+    Specify the BIOS password file if necessary. 
+    Save the password file to the same directory as the script.
+    Passwords are created with HPQPswd.exe utility that usually is included in the bios package.
+    !!!Note that some older BIOS password files have to be created with the packages own HPQPswd executable!!!
 
 .PARAMETER LogFileName
     Set the name of the log file produced by the flash utility.
@@ -20,18 +23,19 @@
 .NOTES
     FileName:    Invoke-HPBIOSUpdate.ps1
     Author:      Lauri Kurvinen / Nickolaj Andersen
-    Contact:     @estmi / @NickolajA
+    Contact:     @estmii / @NickolajA
     Created:     2017-09-05
-    Updated:     2018-01-30
+    Updated:     2018-03-13
 
     Version history:
 	1.0.0 - (2017-09-05) Script created
 	1.0.1 - (2018-01-30) Updated encrypted volume check and cleaned up some logging messages
+	1.0.2 - (2018-03-13) Updated combability for older HP models & fix manage-bde driveletter
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-	[parameter(Mandatory = $true, HelpMessage = "Specify the path containing the HPBIOSUPDREC executable and bios update *.bin -file.")]
+	[parameter(Mandatory = $true, HelpMessage = "Specify the path containing the HPBIOSUPDREC or HPQFlash executable and bios update *.bin -file.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Path,
 
@@ -103,17 +107,39 @@ Process {
 	
 	# HPBIOSUpdate bios upgrade utility file name
 	if (([Environment]::Is64BitOperatingSystem) -eq $true) {
-		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC64.exe" } | Select-Object -ExpandProperty FullName	
+		# Try 1.
+		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "hpqRun.exe" } | Select-Object -ExpandProperty FullName | Select-Object -First 1
+		# Try 2.
+		if (!$HPBIOSUPDUtil) {
+			$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC64.exe" -or $_.Name -like "hpqFlash64.exe" } | Select-Object -ExpandProperty FullName -First 1
+		}
+		# Try 3. Some older models don't have 64bit flash executable at all.
+		if (!$HPBIOSUPDUtil) {
+			$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPQFlash.exe" } | Select-Object -ExpandProperty FullName -First 1
+		}
 	}
 	else {
-		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC.exe" } | Select-Object -ExpandProperty FullName	
+		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC.exe" -or $_.Name -like "HPQFlash.exe" } | Select-Object -ExpandProperty FullName -First 1
 	}
-		
+
 	if ($HPBIOSUPDUtil -ne $null) {	
 		# Set required switches for silent upgrade of the bios and logging
 		Write-CMLogEntry -Value "Using HPBIOSUpdate BIOS update method" -Severity 1
-		# This -r switch appears to be undocumented, which is a shame really, but this prevents the reboot without exit code. The command now returns a correct exit code and lets ConfigMgr reboot the computer gracefully.
-		$FlashSwitches = " -s -r" # -f$($HPBIOSUPDUtilBin)"
+		
+		$HPBIOSUPDUtilVer = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($HPBIOSUPDUtil).FileVersion
+		# This -r switch appears to be undocumented, which is a shame really, but this prevents the reboot without exit code.
+		# The command now returns a correct exit code and lets ConfigMgr reboot the computer gracefully.
+		# if using HPQFlash.exe the executable version must be over 4.50 for -r to work.
+		if (($HPBIOSUPDUtilVer -le "4.5") -and ($HPBIOSUPDUtil -like "*HPQFlash*")) {
+			$FlashSwitches = " -s"
+		}
+		ElseIf ($HPBIOSUPDUtil -like "*hpqRun*")
+		{
+			$FlashSwitches = ""
+		}
+		else {
+			$FlashSwitches = " -s -r"
+		}
 		$FlashUtility = $HPBIOSUPDUtil
 	}
 	
@@ -158,7 +184,7 @@ Process {
 		# Supend Bitlocker if $OSVolumeEncypted is $true
 		if ($OSDriveEncrypted -eq $true) {
 			Write-CMLogEntry -Value "Suspending BitLocker protected volume: $($env:SystemDrive)" -Severity 	
-			Manage-Bde -Protectors -Disable C:
+			Manage-Bde -Protectors -Disable $($env:SystemDrive)
 		}		
 		
 		# Start Bios update process
