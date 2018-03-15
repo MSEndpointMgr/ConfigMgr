@@ -315,7 +315,7 @@ Process {
 	}
 	
 	# Write log file for script execution
-	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version 2.0.2"
+	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version 2.0.2" -Severity 1
 	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
 	# Determine manufacturer
