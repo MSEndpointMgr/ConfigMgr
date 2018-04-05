@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Download BIOS package (regular package) matching computer model and manufacturer.
 .DESCRIPTION
@@ -28,10 +28,10 @@
 	
 .NOTES
     FileName:    Invoke-CMDownloadBIOSPackage.ps1
-    Author:      Nickolaj Andersen & Maurice Daly
-    Contact:     @NickolajA / @modaly_it
+    Author:      Nickolaj Andersen & Maurice Daly & Lauri Kurvinen
+    Contact:     @NickolajA / @modaly_it / @etsmii
     Created:     2017-05-22
-    Updated:     2018-01-10
+    Updated:     2018-04-05
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -43,6 +43,7 @@
 	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
 	2.0.1 - (2018-02-06) Fix for Hewlett Packard 
 	2.0.2 - (2018-03-13) Added version info in the log file and output of SKU value for troubleshooting purposes
+	2.0.3 - (2018-02-15) Changed bios version information lookup from Win32_Bios to MS_SystemInformation and added support for Fujitsu
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -257,7 +258,8 @@ Process {
 		
 		if ($ComputerManufacturer -match "Dell") {
 			# Obtain current BIOS release
-			$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
+			$CurrentBIOSProperties = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+			$CurrentBIOSVersion = "$($CurrentBIOSProperties.BIOSVersion)"
 			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			
 			# Determine Dell BIOS revision format			
@@ -287,12 +289,15 @@ Process {
 		
 		if ($ComputerManufacturer -match "Lenovo") {
 			# Obtain current BIOS release
-			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select-Object -Property *).ReleaseDate).SubString(0, 8)
+			$CurrentBIOSReleaseDate = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+			$CurrentBIOSReleaseDate = [datetime]$CurrentBIOSReleaseDate.BIOSReleaseDate
+			$AvailableBIOSReleaseDateParsed = [datetime]::ParseExact($AvailableBIOSReleaseDate.Trim(), 'yyyyMMdd', $null)
+
 			Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
-			Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
-			
+			Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDateParsed." -Severity 1
+
 			# Compare current BIOS release to available
-			if ($AvailableBIOSReleaseDate -gt $CurrentBIOSReleaseDate) {
+			if ($AvailableBIOSReleaseDateParsed -gt $CurrentBIOSReleaseDate) {
 				# Write output to task sequence variable
 				$TSEnvironment.Value("NewBIOSAvailable") = $true
 				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current date release dated $CurrentBIOSReleaseDate will be replaced by release $AvailableBIOSReleaseDate." -Severity 1
@@ -301,8 +306,8 @@ Process {
 		
 		if ($ComputerManufacturer -match "Hewlett-Packard") {
 			# Obtain current BIOS release
-			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select-Object -Property *)
-			$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
+			$CurrentBIOSProperties = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+			$CurrentBIOSVersion = "$($CurrentBIOSProperties.BiosMajorRelease).$($CurrentBIOSProperties.BiosMinorRelease)"	
 			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			
 			# Compare current BIOS release to available
@@ -312,10 +317,21 @@ Process {
 				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
 			}
 		}
+
+        if ($ComputerManufacturer -match "Fujitsu") {
+			$CurrentBIOSProperties = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+			$CurrentBIOSVersion = "$($CurrentBIOSProperties.BiosMajorRelease).$($CurrentBIOSProperties.BiosMinorRelease)"			
+			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
+			if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
+				# Write output to task sequence variable
+				$TSEnvironment.Value("NewBIOSAvailable") = $true
+				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+			}
+        }
 	}
 	
 	# Write log file for script execution
-	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version 2.0.2" -Severity 1
+	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version 2.0.3" -Severity 1
 	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
 	# Determine manufacturer
@@ -348,16 +364,21 @@ Process {
 			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
 			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 		}
+        "*Fujitsu*" {
+        	$ComputerManufacturer = "Fujitsu"
+			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
+        }
 	}
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
 	
 	# Supported Manufacturer Array
-	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo")
+	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo", "Fujitsu")
 	
 	# Get existing BIOS version
-	$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-	Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion)" -Severity 1
+	$CurrentBIOSVersion = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+	Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion.BIOSVersion)" -Severity 1
 	
 	# Construct new web service proxy
 	try {
@@ -383,7 +404,7 @@ Process {
 	$ErrorActionPreference = "Stop"
 	
 	# Validate supported system was detected
-	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo" -or $ComputerManufacturer -eq "Hewlett-Packard") {
+	if ($ComputerManufacturer -eq "Dell" -or $ComputerManufacturer -eq "Lenovo" -or $ComputerManufacturer -eq "Hewlett-Packard" -or $ComputerManufacturer -eq "Fujitsu") {
 		# Process packages returned from web service
 		if ($Packages -ne $null) {
 			# Add packages with matching criteria to list
@@ -416,6 +437,9 @@ Process {
 						Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -AvailableBIOSReleaseDate $(($PackageList[0].PackageDescription).Split(":")[2].Trimend(")")) -ComputerManufacturer $ComputerManufacturer
 					}
 					elseif ($ComputerManufacturer -match "Hewlett-Packard") {
+						Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
+					}
+					elseif ($ComputerManufacturer -match "Fujitsu") {
 						Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
 					}
 					
@@ -460,8 +484,16 @@ Process {
 						}
 					}
 					elseif ($ComputerManufacturer -match "Hewlett-Packard") {
-						# Determine the latest BIOS package by creation date
-						$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+						# Determine the BIOS package by smallest version first
+						$CurrentBIOSProperties = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+						$CurrentBIOSVersion = "$($CurrentBIOSProperties.BiosMajorRelease).$($CurrentBIOSProperties.BiosMinorRelease)"	
+						$PackageList = $PackageList | Sort-Object -Property PackageVersion -Descending | Where-Object {[version]$_.PackageVersion -gt [version]$CurrentBIOSVersion} | Select-Object -Last 1
+					}
+					elseif ($ComputerManufacturer -match "Fujitsu") {
+						# Determine the BIOS package by smallest version first
+						$CurrentBIOSProperties = (Get-WmiObject -Class MS_SystemInformation -Namespace "root\wmi" | Select-Object -Property *)
+						$CurrentBIOSVersion = "$($CurrentBIOSProperties.BiosMajorRelease).$($CurrentBIOSProperties.BiosMinorRelease)"	
+						$PackageList = $PackageList | Sort-Object -Property PackageVersion -Descending | Where-Object {[version]$_.PackageVersion -gt [version]$CurrentBIOSVersion} | Select-Object -Last 1
 					}
 					if ($PackageList.Count -eq 1) {
 						# Check if BIOS package is newer than currently installed
@@ -472,6 +504,9 @@ Process {
 							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -AvailableBIOSReleaseDate $(($PackageList[0].PackageDescription).Split(":")[2]).Trimend(")") -ComputerManufacturer $ComputerManufacturer
 						}
 						elseif ($ComputerManufacturer -match "Hewlett-Packard") {
+							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
+						}
+						elseif ($ComputerManufacturer -match "Fujitsu") {
 							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
 						}
 						
@@ -508,7 +543,7 @@ Process {
 			}
 		}
 		else {
-			Write-CMLogEntry -Value "This script is supported on Dell, Lenovo and HP systems only at this point, bailing out" -Severity 1
+			Write-CMLogEntry -Value "This script is supported on Dell, Lenovo, HP and Fujitsu systems only at this point, bailing out" -Severity 1
 		}
 	}
 }
