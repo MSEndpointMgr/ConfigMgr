@@ -1,19 +1,24 @@
 ﻿<#
 .SYNOPSIS
-    Download BIOS package (regular package) matching computer model and manufacturer.
+	Download BIOS package (regular package) matching computer model and manufacturer.
+	
 .DESCRIPTION
     This script will determine the model of the computer and manufacturer and then query the specified endpoint
     for ConfigMgr WebService for a list of Packages. It then sets the OSDDownloadDownloadPackages variable to include
     the PackageID property of a package matching the computer model. If multiple packages are detect, it will select
-    most current one by the creation date of the packages.
+	most current one by the creation date of the packages.
+	
 .PARAMETER URI
-    Set the URI for the ConfigMgr WebService.
+	Set the URI for the ConfigMgr WebService.
+	
 .PARAMETER SecretKey
-    Specify the known secret key for the ConfigMgr WebService.
+	Specify the known secret key for the ConfigMgr WebService.
+	
 .PARAMETER Filter
-    Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
+	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
+	
 .EXAMPLE
-    Production BIOS Packages -
+    Production BIOS Packages:
 	# Detect, download and apply an available BIOS update during OS deployment with ConfigMgr (Default):
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
 
@@ -23,7 +28,7 @@
 	# Detect, download and apply an available BIOS update during OS upgrade for an existing operating system using ConfigMgr:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType BIOSUpdate    
 
-	Piloting BIOS Packages (Using V5.0.0 of the Driver  Automation Tool onwards)
+	Piloting BIOS Packages (Using V5.0.0 of the Driver  Automation Tool onwards):
 	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS Update Pilot"
 	
 .NOTES
@@ -31,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2018-01-10
+    Updated:     2018-04-06
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -43,6 +48,7 @@
 	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
 	2.0.1 - (2018-02-06) Fix for Hewlett Packard 
 	2.0.2 - (2018-03-13) Added version info in the log file and output of SKU value for troubleshooting purposes
+	2.0.3 - (2018-04-06) Updated log function with Out-File instead of Add-Content cmdlet
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -97,7 +103,7 @@ Process {
 			[string]$Severity,
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
-			[string]$FileName = "BIOSPackageDownload.log"
+			[string]$FileName = "ApplyDriverPackage.log"
 		)
 		# Determine log file location
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
@@ -112,14 +118,14 @@ Process {
 		$Context = $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 		
 		# Construct final log entry
-		$LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""BIOSPackageDownloader"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
+		$LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""ApplyDriverPackage"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
 		
 		# Add value to log file
 		try {
-			Add-Content -Value $LogText -LiteralPath $LogFilePath -ErrorAction Stop
+			Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
 		}
 		catch [System.Exception] {
-			Write-Warning -Message "Unable to append log entry to BIOSPackageDownload.log file. Error message: $($_.Exception.Message)"
+			Write-Warning -Message "Unable to append log entry to ApplyDriverPackage.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
 		}
 	}
 	
