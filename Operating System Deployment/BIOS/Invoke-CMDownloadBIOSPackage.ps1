@@ -20,15 +20,15 @@
 .EXAMPLE
     Production BIOS Packages:
 	# Detect, download and apply an available BIOS update during OS deployment with ConfigMgr (Default):
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
+	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
 
 	# Detect, download and apply an available BIOS update during OS upgrade with ConfigMgr:
-    .\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType OSUpgrade
+    .\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType OSUpgrade
     
 	# Detect, download and apply an available BIOS update during OS upgrade for an existing operating system using ConfigMgr:
-	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType BIOSUpdate    
+	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType BIOSUpdate    
 
-	Piloting BIOS Packages (Using V5.0.0 of the Driver  Automation Tool onwards):
+	Piloting BIOS Packages (Using V5.0.0 of the BIOS  Automation Tool onwards):
 	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS Update Pilot"
 	
 .NOTES
@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2018-04-06
+    Updated:     2018-04-09
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -49,6 +49,7 @@
 	2.0.1 - (2018-02-06) Fix for Hewlett Packard 
 	2.0.2 - (2018-03-13) Added version info in the log file and output of SKU value for troubleshooting purposes
 	2.0.3 - (2018-04-06) Updated log function with Out-File instead of Add-Content cmdlet
+	2.0.4 - (2018-04-09) Minor code fixes
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -60,7 +61,7 @@ param (
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
 
-	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.")]
+	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or BIOSUpdate.")]
 	[ValidateSet("BareMetal", "OSUpgrade", "BIOSUpdate")]
 	[string]$DeploymentType = "BareMetal",
 
@@ -103,7 +104,7 @@ Process {
 			[string]$Severity,
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
-			[string]$FileName = "ApplyDriverPackage.log"
+			[string]$FileName = "ApplyBIOSPackage.log"
 		)
 		# Determine log file location
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
@@ -118,14 +119,14 @@ Process {
 		$Context = $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 		
 		# Construct final log entry
-		$LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""ApplyDriverPackage"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
+		$LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""ApplyBIOSPackage"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
 		
 		# Add value to log file
 		try {
 			Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
 		}
 		catch [System.Exception] {
-			Write-Warning -Message "Unable to append log entry to ApplyDriverPackage.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
+			Write-Warning -Message "Unable to append log entry to ApplyBIOSPackage.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
 		}
 	}
 	
@@ -427,7 +428,7 @@ Process {
 					
 					if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
 						
-						# Attempt to download driver package content
+						# Attempt to download BIOS package content
 						$DownloadInvocation = Invoke-CMDownloadContent -PackageID $($PackageList[0].PackageID) -DestinationLocationType Custom -DestinationVariableName "OSDBIOSPackage" -CustomLocationPath "%_SMSTSMDataPath%\BIOSPackage"
 						try {
 							# Check for successful package download
@@ -494,7 +495,7 @@ Process {
 								}
 							}
 							catch [System.Exception] {
-								Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
+								Write-CMLogEntry -Value "An error occurred while applying BIOS (multiple package match). Error message: $($_.Exception.Message)" -Severity 3 ; exit 15
 							}	
 						}
 						else {
