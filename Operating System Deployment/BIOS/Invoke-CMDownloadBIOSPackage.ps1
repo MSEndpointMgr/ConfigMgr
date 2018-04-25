@@ -398,7 +398,7 @@ Process {
 				if ($Package.PackageManufacturer -ne $null) {
 					# Match model, manufacturer criteria
 					if ($Manufacturers -contains $ComputerManufacturer) {
-						if (($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
+						if (($Package.PackageName -like "*${SystemSKU}") -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
 							Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
 							$PackageList.Add($Package) | Out-Null
 						}
