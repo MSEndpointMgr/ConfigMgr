@@ -398,12 +398,28 @@ Process {
 				if ($Package.PackageManufacturer -ne $null) {
 					# Match model, manufacturer criteria
 					if ($Manufacturers -contains $ComputerManufacturer) {
-						if (($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
-							Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
-							$PackageList.Add($Package) | Out-Null
+						if ($ComputerManufacturer -eq 'Dell') {
+							# below we look for a regex matching a 4-character alphanumeric string (some Dell systems return something like 05A4 as their SystemSKU)
+							if (($SystemSKU -match "^(?=.{4}$)[a-zA-Z0-9]*$") -and ($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
+								Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+								$PackageList.Add($Package) | Out-Null
+							}
+							elseif (($Package.PackageName -like "*${SystemSKU}") -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
+								Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+								$PackageList.Add($Package) | Out-Null
+							}
+							else {
+								Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+							}
 						}
 						else {
-							Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+							if (($Package.PackageDescription -match $SystemSKU) -and ($ComputerManufacturer -match $Package.PackageManufacturer)) {
+							Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+							$PackageList.Add($Package) | Out-Null
+							}
+							else {
+								Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
+							}
 						}
 					}
 				}
