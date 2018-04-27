@@ -349,6 +349,10 @@ Process {
 			$ComputerManufacturer = "Dell"
 			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
 			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku
+			# some Dell computer systems return empty $systemSKU. If that happens, just set the SystemSKU to the Model
+			if (-not $SystemSKU) {
+				$SystemSKU = $ComputerModel
+			}
 		}
 		"*Lenovo*" {
 			$ComputerManufacturer = "Lenovo"
