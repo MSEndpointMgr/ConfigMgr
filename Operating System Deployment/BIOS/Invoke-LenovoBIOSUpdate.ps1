@@ -10,18 +10,19 @@
 .PARAMETER LogFileName
     Set the name of the log file produced by the flash utility.
 .EXAMPLE
-    .\Invoke-LenovoBIOSUpdate.ps1 -Path %LenovoBIOSFiles% -Password "BIOSPassword" -LogFileName "LogFileName.log"
+    .\Invoke-LenovoBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -Password "BIOSPassword" -LogFileName "LogFileName.log"
 .NOTES
     FileName:    Invoke-LenovoBIOSUpdate.ps1
     Author:      Maurice Daly
     Contact:     @modaly_it
     Created:     2017-06-09
-    Updated:     2018-01-29
+    Updated:     2018-04-30
     
     Version history:
     1.0.0 - (2017-06-09) Script created
 	1.0.1 - (2017-07-05) Added additional logging, methods and variables
 	1.0.2 - (2018-01-29) Changed condition for the password switches
+	1.0.3 - (2018-04-30) Example conditional variable example updated. No functional changes
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -89,7 +90,7 @@ Process
 		}
 	}
 	
-    cd $Path
+    Set-Location $Path
 	# Write log file for script execution
 	Write-CMLogEntry -Value "Initiating script to determine flashing capabilities for Lenovo BIOS updates" -Severity 1
 	
