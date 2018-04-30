@@ -15,14 +15,14 @@
     Set the name of the log file produced by the flash utility.
 
 .EXAMPLE
-    .\Invoke-DellBIOSUpdate.ps1 -Path %DellBIOSFiles% -Password "BIOSPassword" -LogFileName "LogFileName.log"
+    .\Invoke-DellBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -Password "BIOSPassword" -LogFileName "LogFileName.log"
 
 .NOTES
     FileName:    Invoke-DellBIOSUpdate.ps1
     Authors:     Maurice Daly & Nickolaj Andersen
     Contact:     @modaly_it
     Created:     2017-05-30
-    Updated:     2017-07-04
+    Updated:     2018-30-04
     
     Version history:
     1.0.0 - (2017-05-30) Script created (Maurice Daly)
@@ -31,6 +31,7 @@
 	1.0.3 - (2017-06-26) Added checks for Flash64W.exe utility and BIOS file presence including some additional logging (Nickolaj Andersen)
 	1.0.4 - (2017-06-30) Fixed an issue where the password was not passed to Flash64W.exe utility. Added logging for this script to a separate file (Nickolaj Andersen)
 	1.0.5 - (2017-07-04) Configured Flash64W.exe as the native update tool for 64-bit Full OS deployments
+	1.0.6 - (2018-30-04) Variable name correction in example. No functional changes
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
