@@ -90,7 +90,7 @@ Process
 		}
 	}
 	
-    Set-Location $Path
+    Set-Location -Path $Path
 	# Write log file for script execution
 	Write-CMLogEntry -Value "Initiating script to determine flashing capabilities for Lenovo BIOS updates" -Severity 1
 	
