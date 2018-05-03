@@ -84,6 +84,7 @@
 	2.0.6 - (2018-02-21) Updated to cater for the presence of underscores in Microsoft Surface models
 	2.0.7 - (2018-02-25) Added support for a DebugMode switch for running script outside of a task sequence for driver package detection
 	2.0.8 - (2018-02-25) Added a check to bail out the script if computer model and SystemSKU are null or an empty string
+	2.0.9 - (2018-05-03) Added fix so HP/Hewlett-Packard models can correctly be matched based on $ComputerModel
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
