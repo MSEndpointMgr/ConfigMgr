@@ -441,6 +441,13 @@ Process {
 		}
 	}
 
+	if ($ComputerModel -like "HP*")
+		{
+
+    		$ComputerModel = $ComputerModel -replace "HP*", "Hewlett-Packard"
+    
+		}
+
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	if (-not ([string]::IsNullOrEmpty($SystemSKU))) {
@@ -533,9 +540,17 @@ Process {
 						$ComputerDetectionResult = $false
 						switch ($ComputerDetectionMethod) {
 							"ComputerModel" {
-								if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {
-									Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
-									$ComputerDetectionResult = $true
+								if ($ComputerManufacturer -eq "Hewlett-Packard") {
+									if ($package.PackageName.Replace($ComputerManufacturer, "HP").Split('-').Replace("HP", $ComputerManufacturer).Trim()[1] -match $ComputerModel) {
+										Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
+										$ComputerDetectionResult = $true
+									}
+								}
+								else {
+									if ($Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -match $ComputerModel) {
+										Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
+										$ComputerDetectionResult = $true
+									}
 								}
 							}
 							"SystemSKU" {
@@ -596,9 +611,17 @@ Process {
 
 							# Process driver package list in reverse
 							for ($i = ($PackageList.Count-1); $i -ge 0; $i--) {
-								if ($PackageList[$i].PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -notmatch $ComputerModel) {
+								if ($ComputerManufacturer -eq "Hewlett-Packard") {
+									if ($PackageList[$i].PackageName.Replace($ComputerManufacturer, "HP").Split('-').Replace("HP", $ComputerManufacturer).Trim()[1] -notmatch $ComputerModel) {
 									Write-CMLogEntry -Value "Removing driver package matching SystemSKU but not computer model: $($PackageList[$i].PackageName)" -Severity 1
 									$PackageList.RemoveAt($i)
+									}
+								}
+								else {
+									if ($PackageList[$i].PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1] -notmatch $ComputerModel) {
+									Write-CMLogEntry -Value "Removing driver package matching SystemSKU but not computer model: $($PackageList[$i].PackageName)" -Severity 1
+									$PackageList.RemoveAt($i)
+									}
 								}
 							}
 						}
