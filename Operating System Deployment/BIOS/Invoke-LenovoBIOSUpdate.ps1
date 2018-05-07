@@ -16,13 +16,14 @@
     Author:      Maurice Daly
     Contact:     @modaly_it
     Created:     2017-06-09
-    Updated:     2018-04-30
+    Updated:     2018-05-07
     
     Version history:
     1.0.0 - (2017-06-09) Script created
 	1.0.1 - (2017-07-05) Added additional logging, methods and variables
 	1.0.2 - (2018-01-29) Changed condition for the password switches
 	1.0.3 - (2018-04-30) Example conditional variable example updated. No functional changes
+	1.0.4 - (2018-05-07) Updated to copy in required OLEDLG.dll where missing in the BIOS package
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -93,6 +94,11 @@ Process
     Set-Location -Path $Path
 	# Write log file for script execution
 	Write-CMLogEntry -Value "Initiating script to determine flashing capabilities for Lenovo BIOS updates" -Severity 1
+	
+	# Check for required DLL's
+	if ((Test-Path -Path (Join-Path -Path $Path -ChildPath "OLEDLG.dll")) -eq $False){
+		Copy-Item -Path (Join-Path -path $env:_OSDDetectedWinDir -ChildPath "System32\OLEDLG.dll") -Destination "$Path\OLEDLG.dll"
+	}
 	
 	# WinUPTP bios upgrade utility file name
 	if (([Environment]::Is64BitOperatingSystem) -eq $true)
