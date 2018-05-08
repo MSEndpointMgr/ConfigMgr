@@ -97,7 +97,7 @@ Process
 	
 	# Check for required DLL's
 	if ((Test-Path -Path (Join-Path -Path $Path -ChildPath "OLEDLG.dll")) -eq $False){
-		Copy-Item -Path (Join-Path -path $env:_OSDDetectedWinDir -ChildPath "System32\OLEDLG.dll") -Destination "$Path\OLEDLG.dll"
+		Copy-Item -Path (Join-Path -path $TSEnvironment.Value("OSDisk") -ChildPath "Windows\System32\OLEDLG.dll") -Destination "$Path\OLEDLG.dll"
 	}
 	
 	# WinUPTP bios upgrade utility file name
