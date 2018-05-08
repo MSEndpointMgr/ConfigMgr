@@ -84,7 +84,7 @@
 	2.0.6 - (2018-02-21) Updated to cater for the presence of underscores in Microsoft Surface models
 	2.0.7 - (2018-02-25) Added support for a DebugMode switch for running script outside of a task sequence for driver package detection
 	2.0.8 - (2018-02-25) Added a check to bail out the script if computer model and SystemSKU are null or an empty string
-	2.0.9 - (2018-05-07) Removed extit code 34 event. DISM will now continue to process drivers if a single or multiple failures occur in order to proceed with the task sequence
+	2.0.9 - (2018-05-07) Removed exit code 34 event. DISM will now continue to process drivers if a single or multiple failures occur in order to proceed with the task sequence
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
