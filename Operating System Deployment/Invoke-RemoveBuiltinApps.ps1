@@ -14,7 +14,7 @@ function Write-LogEntry {
 
     # Add value to log file
     try {
-        Add-Content -Value $Value -LiteralPath $LogFilePath -ErrorAction Stop
+        Out-File -InputObject $Value -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
     }
     catch [System.Exception] {
         Write-Warning -Message "Unable to append log entry to RemovedApps.log file"
@@ -22,7 +22,7 @@ function Write-LogEntry {
 }
 
 # Get a list of all apps
-Write-LogEntry -Value "Starting built-in AppxPackage and AppxProvisioningPackage removal process"
+Write-LogEntry -Value "Starting built-in AppxPackage, AppxProvisioningPackage and Feature on Demand V2 removal process"
 $AppArrayList = Get-AppxPackage -PackageTypeFilter Bundle -AllUsers | Select-Object -Property Name, PackageFullName | Sort-Object -Property Name
 
 # White list of appx packages to keep installed
@@ -31,7 +31,10 @@ $WhiteListedApps = @(
     "Microsoft.Messaging", 
     "Microsoft.MSPaint",
     "Microsoft.Windows.Photos",
-    "Microsoft.StorePurchaseApp"
+    "Microsoft.StorePurchaseApp",
+    "Microsoft.MicrosoftOfficeHub",
+    "Microsoft.MicrosoftStickyNotes",
+    "Microsoft.WindowsAlarms",
     "Microsoft.WindowsCalculator", 
     "Microsoft.WindowsCommunicationsApps", # Mail, Calendar etc
     "Microsoft.WindowsSoundRecorder", 
@@ -52,49 +55,69 @@ foreach ($App in $AppArrayList) {
         # Attempt to remove AppxPackage
         if ($AppPackageFullName -ne $null) {
             try {
-                Write-LogEntry -Value "Removing application package: $($App.Name)"
+                Write-LogEntry -Value "Removing AppxPackage: $($AppPackageFullName)"
                 Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
             }
             catch [System.Exception] {
-                Write-LogEntry -Value "Removing AppxPackage failed: $($_.Exception.Message)"
+                Write-LogEntry -Value "Removing AppxPackage '$($AppPackageFullName)' failed: $($_.Exception.Message)"
             }
         }
         else {
-            Write-LogEntry -Value "Unable to locate AppxPackage for app: $($App.Name)"
+            Write-LogEntry -Value "Unable to locate AppxPackage: $($AppPackageFullName)"
         }
 
         # Attempt to remove AppxProvisioningPackage
         if ($AppProvisioningPackageName -ne $null) {
             try {
-                Write-LogEntry -Value "Removing application provisioning package: $($AppProvisioningPackageName)"
+                Write-LogEntry -Value "Removing AppxProvisioningPackage: $($AppProvisioningPackageName)"
                 Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
             }
             catch [System.Exception] {
-                Write-LogEntry -Value "Removing AppxProvisioningPackage failed: $($_.Exception.Message)"
+                Write-LogEntry -Value "Removing AppxProvisioningPackage '$($AppProvisioningPackageName)' failed: $($_.Exception.Message)"
             }
         }
         else {
-            Write-LogEntry -Value "Unable to locate AppxProvisioningPackage for app: $($App.Name)"
+            Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
         }
     }
 }
 
 # White list of Features On Demand V2 packages
 Write-LogEntry -Value "Starting Features on Demand V2 removal process"
-$WhiteListOnDemand = "NetFX3|Tools.Graphics.DirectX|Tools.DeveloperMode.Core|Language|Browser.InternetExplorer|ContactSupport|OneCoreUAP"
+$WhiteListOnDemand = "NetFX3|Tools.Graphics.DirectX|Tools.DeveloperMode.Core|Language|Browser.InternetExplorer|ContactSupport|OneCoreUAP|Media.WindowsMediaPlayer"
 
 # Get Features On Demand that should be removed
-$OnDemandFeatures = Get-WindowsCapability -Online | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
+try {
+    $OSBuildNumber = Get-WmiObject -Class "Win32_OperatingSystem" | Select-Object -ExpandProperty BuildNumber
 
-foreach ($Feature in $OnDemandFeatures) {
-    try {
-        Write-LogEntry -Value "Removing Feature on Demand V2 package: $($Feature)"
-        Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -like $Feature } | Remove-WindowsCapability -Online -ErrorAction Stop | Out-Null
+    # Handle cmdlet limitations for older OS builds
+    if ($OSBuildNumber -le "16299") {
+        $OnDemandFeatures = Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
     }
-    catch [System.Exception] {
-        Write-LogEntry -Value "Removing Feature on Demand V2 package failed: $($_.Exception.Message)"
+    else {
+        $OnDemandFeatures = Get-WindowsCapability -Online -LimitAccess -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
     }
+
+    foreach ($Feature in $OnDemandFeatures) {
+        try {
+            Write-LogEntry -Value "Removing Feature on Demand V2 package: $($Feature)"
+
+            # Handle cmdlet limitations for older OS builds
+            if ($OSBuildNumber -le "16299") {
+                Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -like $Feature } | Remove-WindowsCapability -Online -ErrorAction Stop | Out-Null
+            }
+            else {
+                Get-WindowsCapability -Online -LimitAccess -ErrorAction Stop | Where-Object { $_.Name -like $Feature } | Remove-WindowsCapability -Online -ErrorAction Stop | Out-Null
+            }
+        }
+        catch [System.Exception] {
+            Write-LogEntry -Value "Removing Feature on Demand V2 package failed: $($_.Exception.Message)"
+        }
+    }    
+}
+catch [System.Exception] {
+    Write-LogEntry -Value "Attempting to list Feature on Demand V2 packages failed: $($_.Exception.Message)"
 }
 
 # Complete
-Write-LogEntry -Value "Completed built-in AppxPackage and AppxProvisioningPackage removal process"
+Write-LogEntry -Value "Completed built-in AppxPackage, AppxProvisioningPackage and Feature on Demand V2 removal process"
