@@ -17,7 +17,7 @@
 .PARAMETER DeploymentType
 	Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.	
 	
-.PARAMETER Filter
+.PARAMETER Filter[
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
 
 .PARAMETER UseDriverFallback
@@ -47,7 +47,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2018-02-26
+    Updated:     2018-05-07
 	
     Minimum required version of ConfigMgr WebService: 1.5.0
     
@@ -84,6 +84,7 @@
 	2.0.6 - (2018-02-21) Updated to cater for the presence of underscores in Microsoft Surface models
 	2.0.7 - (2018-02-25) Added support for a DebugMode switch for running script outside of a task sequence for driver package detection
 	2.0.8 - (2018-02-25) Added a check to bail out the script if computer model and SystemSKU are null or an empty string
+	2.0.9 - (2018-05-07) Removed exit code 34 event. DISM will now continue to process drivers if a single or multiple failures occur in order to proceed with the task sequence
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -470,7 +471,7 @@ Process {
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
 	}
 	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 2
+		Write-CMLogEntry -Value "An error occurred while calling ConfigMgr WebService for a list of available packages. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 2
 	}
 	
 	# Based upon deployment type, determine how to detect the OS image version property, either from the OS defined in the running task sequence or from the running operating system
@@ -592,7 +593,7 @@ Process {
 					if ($PackageList -ne $null) {
 						# Handle multiple matches when the computer detection method SystemSKU is used
 						if (($ComputerDetectionMethod -like "SystemSKU") -and ($PackageList.Count -ge 2)) {
-							Write-CMLogEntry -Value "Driver package list contains $($PackageList.Count) matches. Atempting to remove driver packages that do not match the computer model." -Severity 1
+							Write-CMLogEntry -Value "Driver package list contains $($PackageList.Count) matches. Attempting to remove driver packages that do not match the computer model." -Severity 1
 
 							# Process driver package list in reverse
 							for ($i = ($PackageList.Count-1); $i -ge 0; $i--) {
@@ -608,7 +609,7 @@ Process {
 							if ($PackageList.Count -eq 1) {
 								try {
 									# Attempt to download driver package content
-									Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content" -Severity 1
+									Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content - $($PackageList[0].PackageID)" -Severity 1
 									$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
 									Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
 									
@@ -624,7 +625,7 @@ Process {
 													Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
 												}
 												else {
-													Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Exit code: $($ApplyDriverInvocation). See DISM.log for more details." -Severity 3; exit 14
+													Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details." -Severity 2
 												}
 											}
 											else {
@@ -678,7 +679,7 @@ Process {
 														
 													}
 													else {
-														Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Exit code: $($ApplyDriverInvocation). See DISM.log for more details." -Severity 3; exit 15
+														Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details." -Severity 2
 													}
 												}
 												else {
