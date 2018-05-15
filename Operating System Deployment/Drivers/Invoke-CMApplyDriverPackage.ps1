@@ -265,7 +265,7 @@ Process {
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
 			
-			if (Test-Path -Path "C:\Windows\CCM\OSDDownloadContent.exe") {
+			if (-not $TSEnvironment.Value("_SMSTSInWinPE") -eq 'true') {
 				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
 				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
 			}
