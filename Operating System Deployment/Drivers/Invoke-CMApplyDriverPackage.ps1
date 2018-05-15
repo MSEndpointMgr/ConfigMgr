@@ -265,13 +265,17 @@ Process {
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
 			
-			if (-not $TSEnvironment.Value("_SMSTSInWinPE") -eq 'true') {
+			if ($TSEnvironment.Value("_SMSTSInWinPE") -eq 'true') {
+				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
+				$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+			}
+			elseif (Test-Path 'C:\Windows\CCM\OSDDownloadContent.exe'){
 				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
 				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
 			}
 			else {
-				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+				Write-CMLogEntry -Value "Unable to determine whether in WinPE or full OS. Defaulting to FullOS but this may fail." -Severity 2;
+				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
 			}
 			
 			# Match on return code
