@@ -22,11 +22,12 @@
     Author:      Lauri Kurvinen / Nickolaj Andersen
     Contact:     @estmi / @NickolajA
     Created:     2017-09-05
-    Updated:     2018-01-30
+    Updated:     2018-06-14
 
     Version history:
 	1.0.0 - (2017-09-05) Script created
 	1.0.1 - (2018-01-30) Updated encrypted volume check and cleaned up some logging messages
+	1.0.2 - (2018-06-14) Added support for HPFirmwareUpdRec utility - thanks to Jann Idar Hillestad (jihillestad@hotmail.com)
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -101,23 +102,39 @@ Process {
 	# Write log file for script execution	
 	Write-CMLogEntry -Value "Initiating script to determine flashing capabilities for HP BIOS updates" -Severity 1
 	
-	# HPBIOSUpdate bios upgrade utility file name
+	# Attempt to detect HPBIOSUPDREC utility file name
 	if (([Environment]::Is64BitOperatingSystem) -eq $true) {
 		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC64.exe" } | Select-Object -ExpandProperty FullName	
 	}
 	else {
 		$HPBIOSUPDUtil = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HPBIOSUPDREC.exe" } | Select-Object -ExpandProperty FullName	
 	}
-		
+
+    # Attempt to detect HPFirmwareUpdRec utility file name
+	if (([Environment]::Is64BitOperatingSystem) -eq $true) {
+		$HPFirmwareUpdRec = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HpFirmwareUpdRec64.exe" } | Select-Object -ExpandProperty FullName
+	}
+	else {
+		$HPFirmwareUpdRec = Get-ChildItem -Path $Path -Filter "*.exe" -Recurse | Where-Object { $_.Name -like "HpFirmwareUpdRec.exe" } | Select-Object -ExpandProperty FullName	
+	}
+
 	if ($HPBIOSUPDUtil -ne $null) {	
 		# Set required switches for silent upgrade of the bios and logging
-		Write-CMLogEntry -Value "Using HPBIOSUpdate BIOS update method" -Severity 1
+		Write-CMLogEntry -Value "Using HPBIOSUpdRec BIOS update method" -Severity 1
 		# This -r switch appears to be undocumented, which is a shame really, but this prevents the reboot without exit code. The command now returns a correct exit code and lets ConfigMgr reboot the computer gracefully.
-		$FlashSwitches = " -s -r" # -f$($HPBIOSUPDUtilBin)"
+		$FlashSwitches = " -s -r"
 		$FlashUtility = $HPBIOSUPDUtil
 	}
+
+	if ($HPFirmwareUpdRec -ne $null) {	
+		# Set required switches for silent upgrade of the bios and logging
+		Write-CMLogEntry -Value "Using HPFirmwareUpdRec BIOS update method" -Severity 1
+		# This -r switch appears to be undocumented, which is a shame really, but this prevents the reboot without exit code. The command now returns a correct exit code and lets ConfigMgr reboot the computer gracefully.
+		$FlashSwitches = " -s -r"
+		$FlashUtility = $HPFirmwareUpdRec
+	}
 	
-	if (!$FlashUtility) {
+	if (-not($FlashUtility)) {
 		Write-CMLogEntry -Value "Supported upgrade utility was not found." -Severity 3; exit 1	
 	}
 	
