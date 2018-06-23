@@ -662,12 +662,12 @@ Process {
 									Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based up latest package creation date" -Severity 1
 									
 									# Determine matching driver package from array list with vendor specific solutions
-									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10") -and $PSBoundParameters.ContainsKey("UseLatestHPWindows10DP")) {
-										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
-									}
-                                    					elseif (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
+									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
 										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSImageVersion)" -Severity 1
 										$Package = ($PackageList | Where-Object { $_.PackageName -match ([System.Version]$OSImageVersion).Build }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+									}
+                                    					elseif (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10") -and $PSBoundParameters.ContainsKey("UseLatestHPWindows10DP")) {
+										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 									}
 									else {
 										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
