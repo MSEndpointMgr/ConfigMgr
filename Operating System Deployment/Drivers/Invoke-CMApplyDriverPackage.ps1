@@ -23,6 +23,9 @@
 .PARAMETER UseDriverFallback
 	Specify if the script is to be used with a driver fallback package.
 
+.PARAMETER UseLatestHPWindows10DP
+    Specify if the script should use the latest available Windows 10 driver pack for HP models in cases where a build-specific driver pack is not available.
+
 .PARAMETER DebugMode
 	Use this switch when running script outside of a Task Sequence.
 
@@ -111,6 +114,10 @@ param (
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify if the script is to be used with a driver fallback package.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[switch]$UseDriverFallback,
+	
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify if the script will use the latest available Windows 10 HP driver pack instead of matching the build number.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
+	[switch]$UseLatestHPWindows10DP,
 
 	[parameter(Mandatory = $true, ParameterSetName = "Debug", HelpMessage = "Use this switch when running script outside of a Task Sequence.")]
 	[switch]$DebugMode,
@@ -554,7 +561,10 @@ Process {
 								if ($OSName -like "Windows 10") {
 									switch ($ComputerManufacturer) {
 										"Hewlett-Packard" {
-											if ($Package.PackageName -match ([System.Version]$OSImageVersion).Build) {
+											if ($PSBoundParameters.ContainsKey("UseLatestHPWindows10DP") -and ($Package.PackageName -match $OSName)) {
+                                                						$MatchFound = $true
+                                            						}
+                                            						elseif ($Package.PackageName -match ([System.Version]$OSImageVersion).Build) {
 												$MatchFound = $true
 											}
 										}
@@ -652,7 +662,10 @@ Process {
 									Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based up latest package creation date" -Severity 1
 									
 									# Determine matching driver package from array list with vendor specific solutions
-									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
+									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10") -and $PSBoundParameters.ContainsKey("UseLatestHPWindows10DP")) {
+										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+									}
+                                    					elseif (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
 										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSImageVersion)" -Severity 1
 										$Package = ($PackageList | Where-Object { $_.PackageName -match ([System.Version]$OSImageVersion).Build }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 									}
