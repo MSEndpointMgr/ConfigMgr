@@ -32,16 +32,19 @@ function Get-ADRInfo
     Param
     (
         [Parameter(Mandatory = $true)]
-		[string]$ADRName
+        [string]$ADRName,
+        [Parameter(Mandatory = $true)]
+		[string]$SiteCode
     )
     try 
     {
-        [wmi]$AutoDeployment = (Get-WmiObject -Class SMS_AutoDeployment -Namespace root/SMS/site_CAS | Where-Object -FilterScript {$_.Name -eq $ADRName}).__PATH
-        return $AutoDeployment    
+        $Namespace = "root/sms/site_" + $siteCode
+        [wmi]$ADR = (Get-WmiObject -Class SMS_AutoDeployment -Namespace $Namespace | Where-Object -FilterScript {$_.Name -eq $ADRName}).__PATH
+        return $ADR 
     }
     catch 
     {
-        throw 'Failed to Get ADRInfor'
+        throw 'Failed to Get ADRInfo'
     }
 } 
 
