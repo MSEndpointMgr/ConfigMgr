@@ -150,6 +150,54 @@ function Send-TeamsMessage
       Invoke-RestMethod -uri $url -Method Post -body $body -ContentType 'application/json'
 }
 
+function Send-CMContent
+{
+    [CMdletbinding()]
+    Param
+    (
+        [Parameter(Mandatory = $true)]
+        [string]$PackageID
+        [Parameter(Mandatory = $false)]
+        [string]$DPName
+        [Parameter(Mandatory = $false)]
+        [string]$DPGroupName
+    )
+    if($DPGroupName -and $DPName -eq $false)
+    {
+        throw "You must choose either DPName or DPGroupName to have content replicated to"
+    }
+    if($DPGroupName -and DPName)
+    {
+        throw "You must chose either DPname OR DpGroupName to have content replicated to you cannot do both"
+    }
+    try
+    {
+        if($DPGroupName)
+        {
+            Get-CMDisttributionPointGroup -Name $DPGroupName -ErrorAction Stop
+            start-CMContentDistribution -DistributionPointGroupName $DpGroupName -DeploymentPackageID $PackageID -ErrorAction Stop
+            write-verbose "Package Was succesfully added to the distribution point group."
+        }
+        if($DPName)
+        {
+            write-verbose "Getting or confirming FQDN of site server with DP Role installed"
+            $DPName = Get-CMSite | Select-Object ServerName | Where-Object{$_.Servername -match $DPName}
+            if($DPName.Servername)
+            {
+                write-verbose "Validating the DP Role is installed on the server"
+                Get-CMDistributionPoint -SiteSystemServerName $DPName.Servername -ErrorAction Stop
+                write-verbose "Distribution Point is Installed on this Server "
+            }
+            start-CMContentDistribution -DistributionPointName $DpName.Servername -DeploymentPackageID $PackageID -ErrorAction Stop
+            write-verbose "Package was succesfully added to the distribution point, see distrmgr.log for content status."
+        }
+    }
+    catch
+    {
+        Throw "Something went wrong with sending the content to the distribution point."
+    }
+}
+
 function Test-Module
 {
     [CMdletbinding()]
@@ -167,3 +215,4 @@ function Test-Module
         return $false
     }
 }
+
