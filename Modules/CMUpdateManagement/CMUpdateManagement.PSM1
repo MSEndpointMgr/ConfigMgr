@@ -131,23 +131,51 @@ function Send-TeamsMessage
     (
         [Parameter(Mandatory = $true)]
         [string]$url,
-        [Parameter(Mandatory = $true)]
-        [string]$TaskName,
-        [Parameter(Mandatory = $true)]
-        [string]$ServerName
-    ) 
-    $Time = Get-DAte
+        [Parameter(Mandatory = $false)]
+        [array]$UpdateList
+    )
+    write-verbose "Generating HASH table with list of updates" 
+    $HashArray = @()
+    #Create Hash Array for presentation of information. 
+    Foreach ($Update in $UpdateList)
+    {
+        $Hash = @{
+            Name = ''
+            Value = ''
+        }
+        #Create the Hash Key and values
+        $Value = $Update.LocalizedDisplayname
+        #Assign the value to be the localized display name or title of the update.
+        $Hash.Name = $Update.ArticleID
+        #makes the the .NAME field become the article ID in the hash table.
+        $Hash.Value = $Value
+        #adds the value (Display name to the row in the hash)
+        #Add hash to hash array
+        $HashArray += $Hash
+    }
+    write-verbose "Completed creation of HASH now converting to JSON and sending to teams."
     $body = ConvertTo-Json -Depth 4 @{
-        title    = "$TaskName exited with status $Status"
-        text   = "$TaskName was completed at $time"
+        title    = "The following updates are slated for deployment"
+        #Modify as desired for the Title of the message
+        text   = "Please review the below updates"
+        #Subsection Message modify as desired for the subtitle of the message.
         sections = @(
           @{
-            activityTitle    = "$TaskName"
-            activitySubtitle = "$TaskName completed on $ServerName"
+            facts = $HashArray
+            #post the hash array value as the facts of the update for the section.
           }
         )
       }
-      Invoke-RestMethod -uri $url -Method Post -body $body -ContentType 'application/json'
+      $Results = Invoke-RestMethod -uri $url -Method Post -body $body -ContentType 'application/json' -ErrorAction Stop
+      #Capture the response from the webURL if 1 then succesfully sent.
+      if($Results -eq 1)
+      {
+          write-verbose "Succesfully send list of updates to teams"
+      }
+      if($Results -ne 1)
+      {
+          write-verbose "The message was not sent"
+      }
 }
 
 function Send-CMContent
@@ -198,6 +226,30 @@ function Send-CMContent
     }
 }
 
+function Test-ConfigMgrAvailable
+{
+    [CMdletbinding()]
+    Param
+    (
+
+    )
+        try
+        {
+            if((Test-Module -ModuleName ConfigurationManager) -eq $false){throw "You have not loaded the configuration manager module please load the appropriate module and try again."}
+            write-Verbose "ConfigurationManager Module is loaded"
+            Write-Verbose "Checking if current drive is a CMDrive"
+            if((Get-location).Path -ne (Get-location -PSProvider 'CmSite').Path){throw "You are not currently connected to a CMSite Provider Please Connect and try again"}
+            write-Verbose "Succesfully validated connection to a CMProvider"
+            write-verbose "Passed all connection tests"
+            return $true
+        }
+        catch
+        {
+            $errorMessage = $_.Exception.Message
+            write-error -Exception CMPatching -Message $errorMessage
+            return $false
+        }
+}
 function Test-Module
 {
     [CMdletbinding()]
@@ -216,3 +268,29 @@ function Test-Module
     }
 }
 
+function Get-CMUpdatesinGroup
+{
+        [CMdletbinding()]
+    Param
+    (
+        [Parameter(Mandatory = $true)]
+        [string]$SUGName
+    )
+    if(Test-ConfigMgrAvailable)
+    {
+        try
+        {
+            write-verbose "The ConfigMgr Cmdlet Library is present retrieving CI_ID of SUG"
+            $SugInfo = Get-CMSoftwareUpdateGroup -Name $SUGName -verbose:$false | Select-Object -ExpandProperty CI_ID
+            write-verbose "Retrieved the CI_ID of the SUG $SugName the CI_ID is $SugInfo"
+            write-verbose "Attempting to retreive update information"
+            $UpdateInfo = Get-CMSoftwareUpdate -UpdateGroupID $SugInfo -fast -verbose:$false | Select-Object articleID,LocalizedInformativeURL,LocalizedDisplayName
+            return $UpdateInfo
+        }
+        catch
+        {
+            $errorMessage = $_.Exception.Message
+            write-error -Exception CMPatching -Message $errorMessage
+        }
+    }
+}
