@@ -10,7 +10,7 @@
 	===========================================================================
 #>
 
-<#
+
 function Get-CMModule
 {
     Try
@@ -23,7 +23,7 @@ function Get-CMModule
         Throw "Failure to import SCCM Cmdlets."
     } 
 }
-#>
+
 
 
 function Get-ADRInfo
@@ -143,12 +143,13 @@ function Send-TeamsMessage
             Name = ''
             Value = ''
         }
-        #Create the Hash Key and values
-        $Value = $Update.LocalizedDisplayname
         #Assign the value to be the localized display name or title of the update.
         $Hash.Name = $Update.ArticleID
         #makes the the .NAME field become the article ID in the hash table.
-        $Hash.Value = $Value
+        #Create the merged information to make link clicable.
+        $UpateInfo = '[' + $Update.LocalizedDisplayName + '](' +$Update.LocalizedInformativeURL + ')'
+        $Hash.Value = $UpateInfo
+        #$Update.LocalizedInformativeURL
         #adds the value (Display name to the row in the hash)
         #Add hash to hash array
         $HashArray += $Hash
