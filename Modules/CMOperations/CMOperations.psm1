@@ -1,10 +1,12 @@
 ﻿<#	
 	===========================================================================
-	 Created with: 	SAPIEN Technologies, Inc., PowerShell Studio 2017 v5.4.144
+	 Created with: 	VSCode
 	 Created on:   	2/23/2018 11:13 AM
+	 Updated on: 	8/22/2018 10:34 AM
 	 Created by:   	Jordan Benzing
-	 Organization: 	
+	 Organization: 	SCConfigMgr
 	 Filename:     	CMOperations.psm1
+	 Version: 		1.0.0.6
 	-------------------------------------------------------------------------
 	 Module Name: CMOperations
 	===========================================================================
@@ -31,11 +33,7 @@ function Start-SoftwareUpdateScan
 		{
 			try
 			{
-				Write-Verbose -message "Attempting to start a Software Update Scan Cycle"
-				Invoke-WmiMethod -ComputerName $ComputerName -ErrorAction Stop -Namespace root\ccm -Class SMS_CLIENT -Name TriggerSchedule "{00000000-0000-0000-0000-000000000113}" | Out-Null
-				#Uses the invoke command to start scheduled action 113 - Software Update Scan Cycle
-				Write-Verbose -Message "The computer has started a software update scan cycle."
-				#When verbose flag is triggered notifies the user that the cycle has been started.
+				Start-ActionSoftwareUpdateScan -ComputerName $ComputerName -ErrorAction Stop
 			}
 			Catch
 			{
@@ -49,11 +47,7 @@ function Start-SoftwareUpdateScan
 	{
 		try
 		{
-			Write-Verbose -message "Attempting to start a Software Update Scan Cycle"
-			Invoke-WmiMethod -ComputerName $ComputerName -ErrorAction Stop -Namespace root\ccm -Class SMS_CLIENT -Name TriggerSchedule "{00000000-0000-0000-0000-000000000113}" | Out-Null
-			#Uses the invoke command to start scheduled action 113 - Software Update Scan Cycle
-			Write-Verbose -Message "The computer has started a software update scan cycle."
-			#When verbose flag is triggered notifies the user that the cycle has been started.
+			Start-ActionSoftwareUpdateScan -ComputerName $ComputerName
 		}
 		Catch
 		{
@@ -71,7 +65,9 @@ function Start-HardwareInventoryScan
 		[Parameter(Mandatory = $true)]
 		[string]$ComputerName,
 		[Parameter(Mandatory = $False)]
-		[switch]$ConnectionTest
+		[switch]$ConnectionTest,
+		[Parameter(Mandatory = $false)]
+		[switch]$ForceReset
 	)
 	if ($ConnectionTest)
 	#If the connection test switch is set start the process to test the network connectivity and run the function. 
@@ -79,36 +75,63 @@ function Start-HardwareInventoryScan
 		if (Test-Connectivity -ComputerName $ComputerName)
 		#Validates that the machine can be conneted to. If it passes will enter the try statement to start a Hardware Inventory Scan
 		{
-			try
+			if ($ForceReset)
 			{
-				Write-Verbose -Message "Attempting to invoke a hardware inventory cycle"
-				Invoke-WMIMethod -ComputerName $ComputerName -ErrorAction Stop -Namespace root\ccm -Class SMS_CLIENT -Name TriggerSchedule "{00000000-0000-0000-0000-000000000001}" | Out-Null
-				#Uses the invoke command to start scheduled action 001 - Hardware Inventory Scan Cycle
-				Write-Verbose -Message "The computer has started a hardware inventory cycle."
-				#When verbose flag is triggered notifies the user that the cycle has been started.
+				try
+				{
+					Start-ActionResetHardwareInventory -ComputerName $ComputerName -ErrorAction Stop
+					Start-ActionHardwareInventoryScan -ComputerName $ComputerName -ErrorAction Stop
+				}
+				Catch
+				{
+					throw "$ComputerName failed to clear the hardware inventory and start hardware inventory cycle"
+					#Catch and throw an error statement if anything goes wrong. 
+				}
 			}
-			Catch
+			else
 			{
-				throw "$ComputerName failed to start hardware inventory cycle"
-				#Catch and throw an error statement if anything goes wrong. 
+				try
+				{
+					Start-ActionHardwareInventoryScan -ComputerName $ComputerName -ErrorAction Stop
+				}
+				Catch
+				{
+					throw "$ComputerName failed to start a hardware inventory cycle"
+					#Catch and throw an error statement if anything goes wrong. 
+				}
 			}
 		}
 	}
 	else
 	#In the event a connection test is NOT requested - attempt to perform the action without triggering a connection test. Not reccomended.
 	{
-		try
+		if ($ForceReset)
 		{
-			Write-Verbose -Message "Attempting to invoke a hardware inventory cycle."
-			Invoke-WMIMethod -ComputerName $ComputerName -ErrorAction Stop -Namespace root\ccm -Class SMS_CLIENT -Name TriggerSchedule "{00000000-0000-0000-0000-000000000001}" | Out-Null
-			#Uses the invoke command to start scheduled action 001 - Hardware Inventory Scan Cycle
-			Write-Verbose -Message "The computer has started a hardware inventory cycle."
-			#When verbose flag is triggered notifies the user that the cycle has been started.
+			try
+			{
+				Start-ActionResetHardwareInventory -ComputerName $ComputerName -ErrorAction Stop
+				#Runs the action to reset the hardware inventory
+				Start-ActionHardwareInventoryScan -ComputerName $ComputerName -ErrorAction Stop
+				#Runs the action to start a hardware inventory scan.
+			}
+			Catch
+			{
+				throw "$ComputerName failed to clear the hardware inventory and start hardware inventory cycle"
+				#Catch and throw an error statement if anything goes wrong. 
+			}
 		}
-		Catch
+		else
 		{
-			throw "$ComputerName failed to start a hardware inventory cycle"
-			#Catch and throw an error statement if anything goes wrong. 
+			try
+			{
+				Start-ActionHardwareInventoryScan -ComputerName $ComputerName -ErrorAction Stop
+				#Runs the action to start collecting hardware inventory infomration.
+			}
+			Catch
+			{
+				throw "$ComputerName failed to start a hardware inventory cycle"
+				#Catch and throw an error statement if anything goes wrong. 
+			}
 		}
 	}
 }
@@ -272,8 +295,6 @@ function Get-NextAvailableMW
 		[switch]$AllProgramsMW,
 		[Parameter(Mandatory = $False)]
 		[switch]$ProgramsMW
-		
-		
 	)
 	if ($ConnectionTest)
 	#If the connection test switch is set start the process to test the network connectivity and run the function. 
@@ -286,12 +307,7 @@ function Get-NextAvailableMW
 			{
 				try
 				{
-					Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available ALL PROGRAMS MAINTENANCE WINDOW"
-					$Window = Get-WmiObject -ComputerName $ComputerName -ErrorACtion Stop -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 1 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-					#Gets the Maintenance Window time from WMI And converts it to a date time object. 
-					$Message = "Next available ALL PROGRAMS window for $ComputerName is " + $Window
-					$Message
-					#Returns and displays the window information to the screen.
+					Get-ActionNextAvailableMW -ComputerName $ComputerName -AllProgramsMW -ErrorAction Stop
 				}
 				catch
 				#catches and throws a terminating error if the remote WMI call fails.
@@ -304,12 +320,7 @@ function Get-NextAvailableMW
 			{
 				try
 				{
-					Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available SOFTWARE UPDATES MAINTENANCE WINDOW"
-					$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 4 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-					#Gets the next available maintenance window from WMI of type Software Update and converts it to a datetime object
-					$Message = "Next available SOFTWARE UPDATES MAINTENANCE window for $ComputerName is " + $Window
-					$Message
-					#Returns and displays the window information to the screen.
+					Get-ActionNextAvailableMW -ComputerName $ComputerName -SoftwareMW -ErrorAction Stop
 				}
 				catch
 				#catches and throws a terminating error if the remote WMI call fails.
@@ -322,10 +333,7 @@ function Get-NextAvailableMW
 			{
 				try
 				{
-					Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available PROGRAMS MAINTENANCE WINDOW"
-					$window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 2 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-					$Message = "Next available PROGRAMS MAINTENANCE window for $ComputerName is " + $Window
-					$Message
+					Get-ActionNextAvailableMW -ComputerName $ComputerName -ProgramsMW -ErrorAction Stop
 				}
 				catch
 				{
@@ -336,12 +344,7 @@ function Get-NextAvailableMW
 			{
 				try
 				{
-					Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available MAINTENANCE WINDOW OF ANY TYPE"
-					$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 2 -or $_.Type -eq 1 -or $_.Type -eq 4 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-					#Gets the next available Programs Maintenance window from WMI and converts it to a datetime object
-					$Message = "Next available MAINTEANNCE window of any type for $ComputerName is " + $Window
-					$Message
-					#Returns and displays the window information to the screen.
+					Get-ActionNextAvailableMW -ComputerName $ComputerName -ErrorAction Stop
 				}
 				catch
 				#catches and throws a terminating error if the remote WMI call fails.
@@ -358,10 +361,7 @@ function Get-NextAvailableMW
 		{
 			try
 			{
-				Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available ALL PROGRAMS MAINTENANCE WINDOW"
-				$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 1 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-				$Message = "Next available ALL PROGRAMS window for $ComputerName is " + $Window
-				$Message
+				Get-ActionNextAvailableMW -ComputerName $ComputerName -AllProgramsMW -ErrorAction Stop
 			}
 			catch
 			{
@@ -372,10 +372,7 @@ function Get-NextAvailableMW
 		{
 			try
 			{
-				Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available SOFTWARE UPDATES MAINTENANCE WINDOW"
-				$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 4 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-				$Message = "Next available SOFTWARE UPDATES MAINTENANCE window for $ComputerName is " + $Window
-				$Message
+				Get-ActionNextAvailableMW -ComputerName $ComputerName -SoftwareMW -ErrorAction Stop
 			}
 			catch
 			{
@@ -386,10 +383,7 @@ function Get-NextAvailableMW
 		{
 			try
 			{
-				Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available PROGRAMS MAINTENANCE WINDOW"
-				$window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 2 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-				$Message = "Next available PROGRAMS MAINTENANCE window for $ComputerName is " + $Window
-				$Message
+				Get-ActionNextAvailableMW -ComputerName $ComputerName -ProgramsMW -ErrorAction Stop
 			}
 			catch
 			{
@@ -400,10 +394,7 @@ function Get-NextAvailableMW
 		{
 			try
 			{
-				Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available MAINTENANCE WINDOW OF ANY TYPE"
-				$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 2 -or $_.Type -eq 1 -or $_.Type -eq 4 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
-				$Message = "Next available MAINTEANNCE window of any type for $ComputerName is " + $Window
-				$Message
+				Get-ActionNextAvailableMW -ComputerName $ComputerName -ErrorAction Stop
 			}
 			catch
 			{
@@ -431,14 +422,8 @@ function Get-LastSoftwareUpdateScan
 		{
 			try
 			{
-				Write-Verbose -Message "Attempting to gather Last Scanned WSUS Server name and time"
-				$LastScanTime = Get-WmiObject -ComputerName $ComputerName -ErrorAction Stop -Namespace "Root\ccm\SCanAgent" -ClassName CCM_ScanUpdateSourceHistory | ForEach-Object { [Management.ManagementDateTimeConverter]::ToDateTime($_.LastCompletionTime) }
-				#Connects to WMI And returns the date time object of the last time a WSUS scan was run. 
-				$LastServerScanned = Get-WmiObject -computer $ComputerName -ErrorAction Stop -Namespace root\ccm\softwareupdates\wuahandler -Class CCM_updatesource | Select-Object ContentLocation
-				#Connects to WMI and returns the last server that a software update scan was run against. 
-				$Message = "Your computer $Computername last scanned at " + $LastScanTime + " against the server " + $LastServerScanned.ContentLocation
-				$Message
-				#Returns the message to the screen with the information of last run time and server name.
+				#Calls the Action for getting the last software update scan.
+				Get-ActionLastSoftwareUpdateScan -ComputerName $ComputerName -ErrorAction Stop
 			}
 			catch
 			#Cathes terminating errors and throws an event.
@@ -452,13 +437,7 @@ function Get-LastSoftwareUpdateScan
 	{
 		try
 		{
-			Write-Verbose -Message "Attempting to gather Last Scanned WSUS Server name and time"
-			$LastScanTime = Get-WmiObject -ComputerName $ComputerName -ErrorAction Stop -Namespace "Root\ccm\SCanAgent" -ClassName CCM_ScanUpdateSourceHistory | ForEach-Object { [Management.ManagementDateTimeConverter]::ToDateTime($_.LastCompletionTime) }
-			#Connects to WMI And returns the date time object of the last time a WSUS scan was run. 
-			$LastServerScanned = Get-WmiObject -computer $ComputerName -erroraction Stop -Namespace root\ccm\softwareupdates\wuahandler -Class CCM_updatesource | Select-Object ContentLocation
-			#Connects to WMI and returns the last server that a software update scan was run against.
-			$Message = "Your computer $Computername last scanned at " + $LastScanTime + " against the server " + $LastServerScanned.ContentLocation
-			$Message
+			Get-ActionLastSoftwareUpdateScan -ComputerName $ComputerName -ErrorAction Stop
 		}
 		catch
 		{
@@ -485,13 +464,7 @@ function Get-LastHardwareScan
 		{
 			try
 			{
-				Write-Verbose -Message "Attempting to connect and retrieve the instance for Hardware Inventory Information"
-				$obj = Get-WmiObject -computername $ComputerName -Namespace "root\ccm\invagt" -Class InventoryActionStatus -ErrorAction Stop | Where-Object { $_.InventoryActionID -eq "{00000000-0000-0000-0000-000000000001}" } | select PsComputerName, LastCycleStartedDate, LastReportDate
-				#Get the WMI Instance for the hardware scan information. 
-				Write-Verbose -Message "Retrieved WMI Instance for Hardware Scan Information"
-				$LastHWRun = $ComputerName + " last attempted Hardware inventory on " + [Management.ManagementDateTimeConverter]::ToDateTime($obj.LastCycleStartedDate)
-				#Convert the instance information into a date time object and send the data back to the screen.
-				$LastHWRun
+				Get-ActionLastHardwareScan -ComputerName $ComputerName -ErrorAction Stop
 			}
 			Catch
 			#In the event of an error terminate and throw.
@@ -509,11 +482,7 @@ function Get-LastHardwareScan
 	{
 		try
 		{
-			Write-Verbose -Message "Attempting to connect and retrieve the instance for Hardware Inventory Information"
-			$obj = Get-WmiObject -ComputerName $ComputerName -Namespace "root\ccm\invagt" -Class InventoryActionStatus -ErrorAction Stop | Where-Object { $_.InventoryActionID -eq "{00000000-0000-0000-0000-000000000001}" } | select PsComputerName, LastCycleStartedDate, LastReportDate
-			Write-Verbose -Message "Retrieved WMI Instance for Hardware Scan Information"
-			$LastHWRun = $ComputerName + " last attempted Hardware inventory on " + [Management.ManagementDateTimeConverter]::ToDateTime($obj.LastCycleStartedDate)
-			Write-Host $LastHWRun
+			Get-ActionLastHardwareScan -ComputerName $ComputerName -ErrorAction Stop
 		}
 		Catch
 		{
@@ -523,6 +492,183 @@ function Get-LastHardwareScan
 }
 
 #endregion GetClientInformation
+############################################
+
+############################################
+#region ActionFunctions
+
+#Fucntions within this region contain the actual action that is being performed. These functions are not listed in the manifest as they are hidden behind the wrapper call functions.
+
+#Action Function for starting a Software Update Scan
+function Start-ActionSoftwareUpdateScan
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[string]$ComputerName
+	)
+	Write-Verbose -message "Attempting to start a Software Update Scan Cycle"
+	Invoke-WmiMethod -ComputerName $ComputerName -ErrorAction Stop -Namespace root\ccm -Class SMS_CLIENT -Name TriggerSchedule "{00000000-0000-0000-0000-000000000113}" | Out-Null
+	#Uses the invoke command to start scheduled action 113 - Software Update Scan Cycle
+	Write-Verbose -Message "The computer has started a software update scan cycle."
+	#When verbose flag is triggered notifies the user that the cycle has been started.
+}
+
+#Action function for starting a Hardware Inventory Scan Cycle
+function Start-ActionHardwareInventoryScan
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[string]$ComputerName
+	)
+	Write-Verbose -Message "Attempting to invoke a hardware inventory cycle"
+	Invoke-WMIMethod -ComputerName $ComputerName -ErrorAction Stop -Namespace root\ccm -Class SMS_CLIENT -Name TriggerSchedule "{00000000-0000-0000-0000-000000000001}" | Out-Null
+	#Uses the invoke command to start scheduled action 001 - Hardware Inventory Scan Cycle
+	Write-Verbose -Message "The computer has started a hardware inventory cycle."
+	#When verbose flag is triggered notifies the user that the cycle has been started.
+}
+
+#Action Function for getting the next available MW.
+function Get-ActionNextAvailableMW
+{
+	[CmdletBinding()]
+	param
+	(
+		[parameter(Mandatory = $true)]
+		[string]$ComputerName,
+		[Parameter(Mandatory = $False)]
+		[switch]$ConnectionTest,
+		[Parameter(Mandatory = $False)]
+		[switch]$SoftwareMW,
+		[Parameter(Mandatory = $False)]
+		[switch]$AllProgramsMW,
+		[Parameter(Mandatory = $False)]
+		[switch]$ProgramsMW
+	)
+	if ($AllProgramsMW)
+	#If the All Programs MW is selected find the next available ALL PROGRAMS maintenance window.
+	{
+		try
+		{
+			Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available ALL PROGRAMS MAINTENANCE WINDOW"
+			$Window = Get-WmiObject -ComputerName $ComputerName -ErrorACtion Stop -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 1 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
+			#Gets the Maintenance Window time from WMI And converts it to a date time object. 
+			$Message = "Next available ALL PROGRAMS window for $ComputerName is " + $Window
+			$Message
+			#Returns and displays the window information to the screen.
+		}
+		catch
+		#catches and throws a terminating error if the remote WMI call fails.
+		{
+			throw "An Error has occured retriving window information"
+		}
+	}
+	if ($SoftwareMW)
+	#if the SoftwareMW is selected finds the next available software maintenance window for the device. 
+	{
+		try
+		{
+			Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available SOFTWARE UPDATES MAINTENANCE WINDOW"
+			$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 4 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
+			#Gets the next available maintenance window from WMI of type Software Update and converts it to a datetime object
+			$Message = "Next available SOFTWARE UPDATES MAINTENANCE window for $ComputerName is " + $Window
+			$Message
+			#Returns and displays the window information to the screen.
+		}
+		catch
+		#catches and throws a terminating error if the remote WMI call fails.
+		{
+			throw "An Error has occured retriving window information"
+		}
+	}
+	if ($ProgramsMW)
+	#if the ProgramsMW is selected finds the next available Programs window for the device. 
+	{
+		try
+		{
+			Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available PROGRAMS MAINTENANCE WINDOW"
+			$window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 2 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
+			$Message = "Next available PROGRAMS MAINTENANCE window for $ComputerName is " + $Window
+			$Message
+		}
+		catch
+		{
+			throw "An Error has occured retriving window information"
+		}
+	}
+	if ($SoftwareMW -eq $false -and $AllProgramsMW -eq $false -and $ProgramsMW -eq $false)
+	{
+		try
+		{
+			Write-Verbose -Message "Attempting to connect to $ComputerName and retrieve next available MAINTENANCE WINDOW OF ANY TYPE"
+			$Window = Get-WmiObject -ComputerName $ComputerName -Namespace root\ccm\clientsdk -ClassName CCM_ServiceWindow | Where-Object{ $_.type -eq 2 -or $_.Type -eq 1 -or $_.Type -eq 4 } | ForEach-Object{ [Management.ManagementDateTimeConverter]::ToDateTime($_.StartTime) } | Sort $_.StartTime | Select-Object -First 1
+			#Gets the next available Programs Maintenance window from WMI and converts it to a datetime object
+			$Message = "Next available MAINTEANNCE window of any type for $ComputerName is " + $Window
+			$Message
+			#Returns and displays the window information to the screen.
+		}
+		catch
+		#catches and throws a terminating error if the remote WMI call fails.
+		{
+			throw "An Error has occured retriving window information"
+		}
+	}
+}
+
+#Action Function for getting the last time a software update Scan was performed and the server it was run against.
+function Get-ActionLastSoftwareUpdateScan
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[string]$ComputerName
+	)
+	Write-Verbose -Message "Attempting to gather Last Scanned WSUS Server name and time"
+	$LastScanTime = Get-WmiObject -ComputerName $ComputerName -ErrorAction Stop -Namespace "Root\ccm\SCanAgent" -ClassName CCM_ScanUpdateSourceHistory | ForEach-Object { [Management.ManagementDateTimeConverter]::ToDateTime($_.LastCompletionTime) }
+	#Connects to WMI And returns the date time object of the last time a WSUS scan was run. 
+	$LastServerScanned = Get-WmiObject -computer $ComputerName -ErrorAction Stop -Namespace root\ccm\softwareupdates\wuahandler -Class CCM_updatesource | Select-Object ContentLocation
+	#Connects to WMI and returns the last server that a software update scan was run against. 
+	$Message = "Your computer $Computername last scanned at " + $LastScanTime + " against the server " + $LastServerScanned.ContentLocation
+	$Message
+	#Returns the message to the screen with the information of last run time and server name.
+}
+
+#Action Function for getting the last time a hardware San was run.
+function Get-ActionLastHardwareScan
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[string]$ComputerName
+	)
+	Write-Verbose -Message "Attempting to connect and retrieve the instance for Hardware Inventory Information"
+	$obj = Get-WmiObject -computername $ComputerName -Namespace "root\ccm\invagt" -Class InventoryActionStatus -ErrorAction Stop | Where-Object { $_.InventoryActionID -eq "{00000000-0000-0000-0000-000000000001}" } | select PsComputerName, LastCycleStartedDate, LastReportDate
+	#Get the WMI Instance for the hardware scan information. 
+	Write-Verbose -Message "Retrieved WMI Instance for Hardware Scan Information"
+	$LastHWRun = $ComputerName + " last attempted Hardware inventory on " + [Management.ManagementDateTimeConverter]::ToDateTime($obj.LastCycleStartedDate)
+	#Convert the instance information into a date time object and send the data back to the screen.
+	$LastHWRun
+}
+
+function Start-ActionResetHardwareInventory
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[string]$ComputerName
+	)
+	Write-Verbose -Message "Attemptiong to remove the action status for Hardware Inventory this will force a FULL Hardware Inventory"
+	Get-WmiObject -computername $ComputerName -Namespace "root\ccm\invagt" -Class InventoryActionStatus -ErrorAction Stop | where { $_.InventoryActionID -eq "{00000000-0000-0000-0000-000000000001}" } | Remove-WmiObject
+	#Gets the WMI Instance for the last action status and then deletes it.
+	Write-Verbose -Message "Removed the last Action Status for Hardware Scan"
+}
+#endregion ActionFunctions
 ############################################
 
 ############################################
@@ -619,5 +765,3 @@ function Test-WinRM
 }
 #endregion HelperFunctions
 ############################################
-
-
