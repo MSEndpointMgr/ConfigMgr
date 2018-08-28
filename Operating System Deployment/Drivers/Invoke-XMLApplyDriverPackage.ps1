@@ -266,10 +266,6 @@ Process {
 		}
 	}
 	
-	$ComputerManufacturer = "Dell"
-	$ComputerModel = "XPS 9560"
-	$SystemSKU = "07BE"
-	
 	# Output model info
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
@@ -318,9 +314,7 @@ Process {
 	# Validate operating system name was detected
 	if ($OS -ne $null) {
 		# Validate not virtual machine
-		#$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
-		$ComputerSystemType = "Laptop"
-		
+		$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
 		
 		if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
 			if ($Packages -ne $null) {
