@@ -99,6 +99,7 @@
 						 Improved logic with fallback from SystemSKU to computer model. Script will now fall back to computer model if there was no match to the SystemSKU. This still requires that the SystemSKU contains a value and is not null or empty, otherwise 
 						 the logic will directly fall back to computer model. A new parameter named DriverInstallMode has been added to control how drivers are installed for BareMetal deployment. Valid inputs are Single or Recurse.
 	2.1.1 - (2018-08-28) Code tweaks and changes for Windows build to version switch in the Driver Automation Tool. Improvements to the SystemSKU reverse section for HP models and multiple SystemSKU values from WMI
+	2.1.2 - (2018-08-29) Added code to handle Windows 10 version specific matching and also support matching for the name only
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
@@ -145,7 +146,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.1"
+	$ScriptVersion = "2.1.2"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -357,8 +358,8 @@ Process {
 				if (($OSImages | Measure-Object).Count -ge 2) {
 					# Determine behavior when detecting OS Image data
 					if ($Script:PSBoundParameters["OSImageTSVariableName"]) {
-						Write-CMLogEntry -Value "Multiple OS Image objects detected. Objects will be matched against provided task sequence variable name '$($OSImageTSVariableName)' to determine the correct object" -Severity 1
 						# Select OS Image object matching the value from the task sequence variable passed to the OSImageTSVariableName parameter
+						Write-CMLogEntry -Value "Multiple OS Image objects detected. Objects will be matched against provided task sequence variable name '$($OSImageTSVariableName)' to determine the correct object" -Severity 1
 						$OSImageTSVariableValue = $TSEnvironment.Value("$($OSImageTSVariableName)")
 						foreach ($OSImage in $OSImages) {
 							if ($OSImage.PackageID -like $OSImageTSVariableValue) {
@@ -367,6 +368,7 @@ Process {
 									OSVersion  = $OSImage.Version
 									OSArchitecture = $OSImage.Architecture
 								}
+
 								# Handle return value
 								return $PSObject
 							}
@@ -382,6 +384,7 @@ Process {
 							OSVersion  = $OSImage.Version
 							OSArchitecture = $OSImage.Architecture
 						}
+
 						# Handle return value
 						return $PSObject
 					}
@@ -392,6 +395,7 @@ Process {
 						OSVersion  = $OSImages.Version
 						OSArchitecture = $OSImages.Architecture
 					}
+
 					# Handle return value
 					return $PSObject
 				}
@@ -594,12 +598,11 @@ Process {
 			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
 		}
 	}
+
 	# Set OS Image Version Number
-	if (($OSName -match "Windows 10") -and ($ComputerManufacturer -notmatch "Dell")) {
-		$OSVersion = $($WindowsBuildHashTable.Keys.Where({
-					$WindowsBuildHashTable[$_] -match $OSImageVersion
-				}))
-		Write-CMLogEntry -Value "Translated OSImageVersion: $($OSVersion)" -Severity 1
+	if ($OSName -match "Windows 10") {
+		$OSVersion = $($WindowsBuildHashTable.Keys.Where({ $WindowsBuildHashTable[$_] -match $OSImageVersion }))
+		Write-CMLogEntry -Value "Translated OS image version from '$($OSImageVersion)' to: $($OSVersion)" -Severity 1
 	}
 	
 	# Validate operating system name was detected
@@ -608,7 +611,7 @@ Process {
 		$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
 		if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
 			if ($Packages -ne $null) {
-				if (($ComputerModel -ne $null) -and (-not ([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not ([System.String]::IsNullOrEmpty($SystemSKU))))) {
+				if (($ComputerModel -ne $null) -and (-not([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not([System.String]::IsNullOrEmpty($SystemSKU))))) {
 					# Determine computer model detection
 					if ([System.String]::IsNullOrEmpty($SystemSKU)) {
 						$ComputerDetectionMethod = "ComputerModel"
@@ -708,20 +711,15 @@ Process {
 								if (($Package.PackageManufacturer -match $ComputerManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture) -and ($Package.PackageDescription -match $SystemSKU)) {
 									# Match operating system criteria per manufacturer for Windows 10 packages only
 									if ($OSName -match "Windows 10") {
-										if ([string]::IsNullOrEmpty($OSVersion)) {
-											Write-CMLogEntry -Value "Attempting to match driver package name with OS name '$($OSName)' for $($ComputerManufacturer)" -Severity 1
-											if ($Package.PackageName -match $OSName) {
-												Write-CMLogEntry -Value "Match found between driver package and OS name" -Severity 1
-												$MatchFound = $true
-											}
+										if ($Package.PackageName -match $OSVersion) {
+											Write-CMLogEntry -Value "Attempting to match driver package name with OS name '$($OSName)' and version $($OSVersion) for $($ComputerManufacturer)" -Severity 1
+											$Package | Add-Member -NotePropertyName "OSVersionDetected" -NotePropertyValue $true
+											$MatchFound = $true
 										}
 										else {
-											Write-CMLogEntry -Value "Attempting to match driver package name with OS name '$($OSName)' and version $($OSVersion) for $($ComputerManufacturer)" -Severity 1
-											if (($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSVersion)) {
-												Write-CMLogEntry -Value "Match found between driver package and OS name" -Severity 1
-												$MatchFound = $true
-											}
-											
+											Write-CMLogEntry -Value "Unable to match driver package name with OS version '$($OSVersion)', falling back to match found for '$($OSName)'" -Severity 1
+											$Package | Add-Member -NotePropertyName "OSVersionDetected" -NotePropertyValue $false
+											$MatchFound = $true
 										}
 									}
 									else {
@@ -733,7 +731,7 @@ Process {
 									if ($MatchFound -eq $true) {
 										Write-CMLogEntry -Value "Match found for manufacturer, operating system and architecture: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
 										Write-CMLogEntry -Value "Adding driver package to list of packages to process" -Severity 1
-										$PackageList.Add($Package)
+										$PackageList.Add($Package) | Out-Null
 									}
 									else {
 										Write-CMLogEntry -Value "Unable to find a match for all criteria for driver package, driver package will not be added to list of matching packages" -Severity 2
@@ -859,7 +857,9 @@ Process {
 										if ($PackageNameComputerModel -notmatch $ComputerModel) {
 											Write-CMLogEntry -Value "Detected that the following driver package did not match the computer model: $($PackageList[$i].PackageName)"
 											Write-CMLogEntry -Value "Removing driver package due to inconsistency between computer model value from WMI '$($ComputerModel)' and the translated driver package computer model name '$($PackageNameComputerModel)'" -Severity 1
-											$PackageList.RemoveAt($i)
+											if ($PackageList[$i].OSVersionDetected -eq $false) {
+												$PackageList.RemoveAt($i)
+											}
 										}
 									}
 									
@@ -874,9 +874,9 @@ Process {
 									Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based upon latest package creation date" -Severity 1
 									# Determine matching driver package from array list with vendor specific solutions
 									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
-										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSImageVersion)" -Severity 1
+										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSVersion)" -Severity 1
 										$Package = ($PackageList | Where-Object {
-												$_.PackageName -match ([System.Version]$OSImageVersion).Build
+												$_.PackageName -match $OSVersion
 											}) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 									}
 									else {
