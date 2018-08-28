@@ -105,7 +105,10 @@ Begin {
 		$DebugMode = $true
 	}
 }
-Process {	
+Process {
+   	 # SSL Certificate Validation Workaround
+    	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}	
+
 	# Functions
 	function Write-CMLogEntry {
 		param (
