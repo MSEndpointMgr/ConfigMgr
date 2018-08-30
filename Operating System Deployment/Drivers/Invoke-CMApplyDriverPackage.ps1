@@ -855,7 +855,7 @@ Process {
 											}
 										}
 										if ($PackageNameComputerModel -notmatch $ComputerModel) {
-											Write-CMLogEntry -Value "Detected that the following driver package did not match the computer model: $($PackageList[$i].PackageName)"
+											Write-CMLogEntry -Value "Detected that the following driver package did not match the computer model: $($PackageList[$i].PackageName)" -Severity 1
 											Write-CMLogEntry -Value "Removing driver package due to inconsistency between computer model value from WMI '$($ComputerModel)' and the translated driver package computer model name '$($PackageNameComputerModel)'" -Severity 1
 											if ($PackageList[$i].OSVersionDetected -eq $false) {
 												$PackageList.RemoveAt($i)
