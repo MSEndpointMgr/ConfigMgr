@@ -56,7 +56,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2018-09-03
+    Updated:     2018-08-29
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
     
@@ -100,7 +100,7 @@
 						 the logic will directly fall back to computer model. A new parameter named DriverInstallMode has been added to control how drivers are installed for BareMetal deployment. Valid inputs are Single or Recurse.
 	2.1.1 - (2018-08-28) Code tweaks and changes for Windows build to version switch in the Driver Automation Tool. Improvements to the SystemSKU reverse section for HP models and multiple SystemSKU values from WMI
 	2.1.2 - (2018-08-29) Added code to handle Windows 10 version specific matching and also support matching for the name only
-	2.1.3 - (2018-09-03) Code tweak to Windows 10 version matching process
+
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -146,7 +146,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.3"
+	$ScriptVersion = "2.1.2"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -213,7 +213,13 @@ Process {
 		}
 	}
 	
-
+	# Windows Version Hash Table
+	$WindowsBuildHashTable = @{
+		"1803"  = "10.0.17134.1"
+		"1709"  = "10.0.16299.15"
+		"1703"  = "10.0.15063.0"
+		"1607"  = "10.0.14393.0"
+	}
 	function Invoke-Executable {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
@@ -429,31 +435,17 @@ Process {
 		return $OSImageArchitecture
 	}
 	
-	function Get-OSDetails {
+	function Get-OSName {
 		param (
-			[parameter(Mandatory = $true, HelpMessage = "Windows build number must be provided")]
+			[parameter(Mandatory = $true, HelpMessage = "Windows build version must be provided")]
 			[ValidateNotNullOrEmpty()]
 			[string]$InputObject
 		)
 		
-		# Get operating system name and from build number
+		# Get operating system name from version
 		switch -Wildcard ($InputObject) {
 			"10.0*" {
 				$OSName = "Windows 10"
-				switch (([system.Version]$InputObject).Build) {
-					"17134" {
-						$OSVersion = 1803
-					}
-					"16299" {
-						$OSVersion = 1709
-					}
-					"15063" {
-						$OSVersion = 1703
-					}
-					"14393" {
-						$OSVersion = 1607
-					}
-				}
 			}
 			"6.3*" {
 				$OSName = "Windows 8.1"
@@ -465,21 +457,7 @@ Process {
 		Write-CMLogEntry -Value "Translated OSName from OSImageVersion: $($OSName)" -Severity 1
 		
 		# Handle return value from function
-		if ($OSName -match "Windows 10") {
-			Write-CMLogEntry -Value "Translated OSVersion from OSImageVersion: $($OSVersion)" -Severity 1
-			$PSObject = [PSCustomObject]@{
-				OSName = $OSName
-				OSVersion = $OSVersion
-			}
-			return $PSObject
-		}
-		else {
-			$PSObject = [PSCustomObject]@{
-				OSName  = $OSName
-				OSVersion = $null
-			}
-			return $PSObject
-		}
+		return $OSName
 	}
 	
 	# Write log file for script execution
@@ -542,7 +520,7 @@ Process {
 			$FallBackSKU = [regex]::Matches($OEMString, '\[\S*]')[0].Value.TrimStart("[").TrimEnd("]")
 		}
 	}
-
+	
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	if (-not ([string]::IsNullOrEmpty($SystemSKU))) {
@@ -589,9 +567,7 @@ Process {
 			$OSArchitecture = $OSImageData.OSArchitecture
 			
 			# Translate operating system name from version
-			$OSDetails = Get-OSDetails -InputObject $OSImageVersion
-			$OSName = $OSDetails.OSName
-			$OSVersion = $OSDetails.OSVersion
+			$OSName = Get-OSName -InputObject $OSImageVersion
 			
 			# Translate operating system architecture from web service response
 			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
@@ -605,9 +581,7 @@ Process {
 			$OSArchitecture = $OSImageData.OSArchitecture
 			
 			# Translate operating system name from version
-			$OSDetails = Get-OSDetails -InputObject $OSImageVersion
-			$OSName = $OSDetails.OSName
-			$OSVersion = $OSDetails.OSVersion
+			$OSName = Get-OSName -InputObject $OSImageVersion
 			
 			# Translate operating system architecture from web service response
 			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
@@ -618,13 +592,17 @@ Process {
 			$OSArchitecture = Get-WmiObject -Class Win32_OperatingSystem | Select-Object -ExpandProperty OSArchitecture
 			
 			# Translate operating system name from version
-			$OSDetails = Get-OSDetails -InputObject $OSImageVersion
-			$OSName = $OSDetails.OSName
-			$OSVersion = $OSDetails.OSVersion
+			$OSName = Get-OSName -InputObject $OSImageVersion
 			
 			# Translate operating system architecture from running operating system
 			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
 		}
+	}
+
+	# Set OS Image Version Number
+	if ($OSName -match "Windows 10") {
+		$OSVersion = $($WindowsBuildHashTable.Keys.Where({ $WindowsBuildHashTable[$_] -match $OSImageVersion }))
+		Write-CMLogEntry -Value "Translated OS image version from '$($OSImageVersion)' to: $($OSVersion)" -Severity 1
 	}
 	
 	# Validate operating system name was detected
