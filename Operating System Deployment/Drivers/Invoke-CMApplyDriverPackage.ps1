@@ -142,7 +142,11 @@ param (
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$OSImageTSVariableName
+	[string]$OSImageTSVariableName,
+	
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a Task Sequence variable name that should contain a value for the child Task sequence package ID that has the Apply OS step.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$ChildTSVariableName
 )
 Begin {
 	# Define script version
@@ -338,7 +342,12 @@ Process {
 	function Get-OSImageData {
 		# Determine how to get the SMSTSPackageID value
 		if ($PSCmdLet.ParameterSetName -eq "Execute") {
-			$SMSTSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
+			if ($Script:PSBoundParameters["ChildTSVariableName"]) {
+				$SMSTSPackageID = $TSEnvironment.Value("$($ChildTSVariableName)")
+			}
+			else {
+				$SMSTSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
+			}
 		}
 		else {
 			$SMSTSPackageID = $TSPackageID
