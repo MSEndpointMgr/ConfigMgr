@@ -101,6 +101,7 @@
 	2.1.1 - (2018-08-28) Code tweaks and changes for Windows build to version switch in the Driver Automation Tool. Improvements to the SystemSKU reverse section for HP models and multiple SystemSKU values from WMI
 	2.1.2 - (2018-08-29) Added code to handle Windows 10 version specific matching and also support matching for the name only
 	2.1.3 - (2018-09-03) Code tweak to Windows 10 version matching process
+	2.1.4 - (2018-09-18) Added support to override the task sequence package ID retrieved from _SMSTSPackageID when the Apply Operating System step is in a child task sequence
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -142,11 +143,15 @@ param (
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$OSImageTSVariableName
+	[string]$OSImageTSVariableName,
+
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a task sequence package ID for a child task sequence. Should only be used when the Apply Operating System step is in a child task sequence.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$OverrideTSPackageID
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.3"
+	$ScriptVersion = "2.1.4"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -338,7 +343,12 @@ Process {
 	function Get-OSImageData {
 		# Determine how to get the SMSTSPackageID value
 		if ($PSCmdLet.ParameterSetName -eq "Execute") {
-			$SMSTSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
+			if ($Script:PSBoundParameters["OverrideTSPackageID"]) {
+				$SMSTSPackageID = $OverrideTSPackageID
+			}
+			else {
+				$SMSTSPackageID = $TSEnvironment.Value("_SMSTSPackageID")
+			}
 		}
 		else {
 			$SMSTSPackageID = $TSPackageID
