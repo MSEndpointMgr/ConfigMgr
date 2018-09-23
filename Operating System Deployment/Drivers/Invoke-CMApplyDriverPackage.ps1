@@ -102,6 +102,7 @@
 	2.1.2 - (2018-08-29) Added code to handle Windows 10 version specific matching and also support matching for the name only
 	2.1.3 - (2018-09-03) Code tweak to Windows 10 version matching process
 	2.1.4 - (2018-09-18) Added support to override the task sequence package ID retrieved from _SMSTSPackageID when the Apply Operating System step is in a child task sequence
+	2.1.5 - (2018-09-18) Updated the computer model detection logic that replaces parts of the string from the PackageName property to retrieve the computer model only
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -151,7 +152,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.4"
+	$ScriptVersion = "2.1.5"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -298,7 +299,7 @@ Process {
 		try {
 			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
 			
-			if (Test-Path -Path "C:\Windows\CCM\OSDDownloadContent.exe") {
+			if ($TSEnvironment.Value("_SMSTSInWinPE") -eq $false) {
 				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
 				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
 			}
@@ -668,12 +669,13 @@ Process {
 							$ComputerDetectionResult = $false
 							switch ($ComputerManufacturer) {
 								"Hewlett-Packard" {
-									$PackageNameComputerModel = $Package.PackageName.Replace("Hewlett-Packard", "HP").Split("-").Trim()[1]
+									$PackageNameComputerModel = $Package.PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
 								}
 								Default {
-									$PackageNameComputerModel = $Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1]
+									$PackageNameComputerModel = $Package.PackageName.Replace($ComputerManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
 								}
 							}
+
 							switch ($ComputerDetectionMethod) {
 								"ComputerModel" {
 									if ($PackageNameComputerModel -match $ComputerModel) {
@@ -880,10 +882,10 @@ Process {
 									for ($i = ($PackageList.Count - 1); $i -ge 0; $i--) {
 										switch ($ComputerManufacturer) {
 											"Hewlett-Packard" {
-												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace("Hewlett-Packard", "HP").Split("-").Trim()[1]
+												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
 											}
 											Default {
-												$PackageNameComputerModel = $PackageList[$i].PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1]
+												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
 											}
 										}
 										if ($PackageNameComputerModel -notmatch $ComputerModel) {
