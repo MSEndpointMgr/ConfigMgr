@@ -512,7 +512,11 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
+			try {	#Handle Microsoft Hyper-V Guest where the object returns null and the replace method fails on a null value
+				$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
+			} catch {
+				$ComputerModel = ''
+			}
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
