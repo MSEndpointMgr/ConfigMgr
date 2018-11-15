@@ -103,6 +103,7 @@
 	2.1.3 - (2018-09-03) Code tweak to Windows 10 version matching process
 	2.1.4 - (2018-09-18) Added support to override the task sequence package ID retrieved from _SMSTSPackageID when the Apply Operating System step is in a child task sequence
 	2.1.5 - (2018-09-18) Updated the computer model detection logic that replaces parts of the string from the PackageName property to retrieve the computer model only
+	2.1.6 - (2018-11-14) Updated Windows 10 version for 1809
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -152,7 +153,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.5"
+	$ScriptVersion = "2.1.6"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -452,6 +453,9 @@ Process {
 			"10.0*" {
 				$OSName = "Windows 10"
 				switch (([system.Version]$InputObject).Build) {
+					"17763" {
+						$OSVersion = 1809
+					}
 					"17134" {
 						$OSVersion = 1803
 					}
