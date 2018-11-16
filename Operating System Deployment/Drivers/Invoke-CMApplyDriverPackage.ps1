@@ -204,7 +204,7 @@ Process {
 			If ($TimezoneBias -match "^-") {$TimezoneBias = $TimezoneBias.Replace('-', '+')# flip the offset value from negative to positive
 			} else {$TimezoneBias = '-' + $TimezoneBias }
 		}
-		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias #"+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
+		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias) #"+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
 		
 		# Construct date for log entry
 		$Date = (Get-Date -Format "MM-dd-yyyy")
