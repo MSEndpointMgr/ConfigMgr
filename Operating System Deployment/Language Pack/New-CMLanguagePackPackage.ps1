@@ -142,7 +142,6 @@ Process {
         # Hash-table for Language Packs and determine the path to the current architecture
         $LanguagePackTable = @{}
         $LanguageFeatureTable = @{}
-        $LanguageFeaturesTable= @()
         $ArchitecturePath = Join-Path -Path $ISORootPath -ChildPath $Architecture
 
         # Process each language pack file and add to hash-table for matching
