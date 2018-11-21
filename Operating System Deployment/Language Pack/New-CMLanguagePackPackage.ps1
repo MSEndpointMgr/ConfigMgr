@@ -13,10 +13,10 @@
     Root of the mounted Windows Language Pack ISO, e.g. F:\.
 
 .PARAMETER FoDx64RootPath
-    Root of the mounted Windows Features on Demand ISO, e.g. G:\. Used for full language features. This parameter is not required.
+    Root of the mounted Windows Features on Demand x64 ISO, e.g. G:\. Used for full language features. This parameter is not required.
 
 .PARAMETER FoDx86RootPath
-    Root of the mounted Windows Features on Demand ISO, e.g. H:\. Used for full language features. This parameter is not required.
+    Root of the mounted Windows Features on Demand x86 ISO, e.g. H:\. Used for full language features. This parameter is not required.
 
 .PARAMETER PackageSourcePath
     Root path for where the Language Pack package source files will be stored.
