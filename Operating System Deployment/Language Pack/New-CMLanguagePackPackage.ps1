@@ -12,6 +12,12 @@
 .PARAMETER ISORootPath
     Root of the mounted Windows Language Pack ISO, e.g. F:\.
 
+.PARAMETER FoDx64RootPath
+    Root of the mounted Windows Features on Demand ISO, e.g. G:\. Used for full language features. This parameter is not required.
+
+.PARAMETER FoDx86RootPath
+    Root of the mounted Windows Features on Demand ISO, e.g. H:\. Used for full language features. This parameter is not required.
+
 .PARAMETER PackageSourcePath
     Root path for where the Language Pack package source files will be stored.
 
@@ -25,23 +31,24 @@
     This string will be included within the automatically generated package name at location %1, e.g. Language Pack - %1 %2 %3
 
 .PARAMETER WindowsVersion
-    Specify the targeted Windows version, e.g. 1709. Used for creating sub-folders in the package source location and when replacing location %2 for the Language Pack package name, e.g. Language Pack - %1 %2 %3.
+    Specify the targeted Windows version, e.g. 1809. Used for creating sub-folders in the package source location and when replacing location %2 for the Language Pack package name, e.g. Language Pack - %1 %2 %3.
 
 .PARAMETER WindowsBuildnumber
-    Specify the targeted Windows build number, e.g. 16299. Used as the Version property of the Language Pack package object.
+    Specify the targeted Windows build number, e.g. 17763. Used as the Version property of the Language Pack package object.
 
 .EXAMPLE
-    .\New-CMLanguagePackPackage.ps1 -SiteServer "CM01" -ISORootPath "F:\" -PackageSourcePath "\\CM01\CMSource\OSD\LanguagePacks\Windows10" -LanguagePacks "da-DK", "sv-SE", "nb-NO" -LanguagePackArchitecture "x64" -PackageName "Windows 10" -WindowsVersion "1709" -WindowsBuildnumber "16299"
+    .\New-CMLanguagePackPackage.ps1 -SiteServer "CM01" -ISORootPath "F:\" -FoDx64RootPath "G:\" -PackageSourcePath "\\CM01\CMSource\OSD\LanguagePacks\Windows10" -LanguagePacks "da-DK", "sv-SE", "nb-NO" -LanguagePackArchitecture "x64" -PackageName "Windows 10" -WindowsVersion "1809" -WindowsBuildnumber "17763"
 
 .NOTES
     FileName:    New-CMLanguagePackPackage.ps1
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2017-10-30
-    Updated:     2017-10-30
+    Updated:     2018-11-20
     
     Version history:
     1.0.0 - (2017-10-30) Script created
+    1.0.1 - (2018-11-20) Add support for language features from Feature on Demand disks
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -53,6 +60,12 @@ param(
     [parameter(Mandatory=$true, HelpMessage="Root of the mounted Windows Language Pack ISO, e.g. F:\.")]
     [ValidateNotNullOrEmpty()]
     [string]$ISORootPath,
+
+    [parameter(Mandatory=$false, HelpMessage="Root of the mounted Windows Features on Demand x64 Disk 1 ISO, e.g. G:\.")]
+    [string]$FoDx64RootPath,
+
+    [parameter(Mandatory=$false, HelpMessage="Root of the mounted Windows Features on Demand x86 Disk 1 ISO, e.g. H:\.")]
+    [string]$FoDx86RootPath,
 
     [parameter(Mandatory=$true, HelpMessage="Root path for where the Language Pack package source files will be stored.")]
     [ValidateNotNullOrEmpty()]
@@ -82,6 +95,7 @@ param(
     [ValidateLength(1,5)]
     [string]$WindowsBuildnumber
 )
+
 Begin {
     # Determine SiteCode from WMI
     try {
@@ -127,6 +141,8 @@ Process {
     foreach ($Architecture in $LanguagePackArchitecture) {
         # Hash-table for Language Packs and determine the path to the current architecture
         $LanguagePackTable = @{}
+        $LanguageFeatureTable = @{}
+        $LanguageFeaturesTable= @()
         $ArchitecturePath = Join-Path -Path $ISORootPath -ChildPath $Architecture
 
         # Process each language pack file and add to hash-table for matching
@@ -134,6 +150,27 @@ Process {
         foreach ($LanguagePackObject in (Get-ChildItem -Path $ArchitecturePath -Recurse -Filter "*.cab" | Where-Object { $_.Name -match $Architecture -and $_.Name -notmatch "Interface" })) {
             $LanguagePackID = $LanguagePackObject -replace "Microsoft-Windows-Client-Language-Pack_$($Architecture)_", "" -replace ".cab", ""
             $LanguagePackTable.Add($LanguagePackID, $LanguagePackObject)
+        }
+
+        if ($Architecture -eq "x64") { $LanguageFeaturePath = $FoDx64RootPath }
+        if ($Architecture -eq "x86") { $LanguageFeaturePath = $FoDx86RootPath }
+
+        Write-Verbose -Message "Enumerating eligible Language Features from media for architecture: $($Architecture)"
+        foreach ($LanguageFeatureObject in (Get-ChildItem -Path $LanguageFeaturePath -Recurse -Filter "*.cab" | Where-Object { $_.Name -match "LanguageFeatures" -and ($_.Name -match "Basic" -or $_.Name -match "Handwriting" -or $_.Name -match "OCR" -or $_.Name -match "TextToSpeech" -or $_.Name -match "Speech")})) {
+            $LanguageFeatureID = $LanguageFeatureObject -replace "Microsoft-Windows-LanguageFeatures-", "" -replace "Basic-", "" -replace "Handwriting-", "" -replace "OCR-", "" -replace "TextToSpeech-", "" -replace "Speech-", "" -split "-Package~"
+            $LanguageFeaturesTable = New-Object System.Collections.ArrayList
+
+            foreach ($LanguageFeaturesObject in (Get-ChildItem -Path $LanguageFeaturePath -Recurse -Filter "*.cab" | Where-Object { $_.Name -match "LanguageFeatures" -and $_.Name -match $LanguageFeatureID[0] -and ($_.Name -match "Basic" -or $_.Name -match "Handwriting" -or $_.Name -match "OCR" -or $_.Name -match "TextToSpeech" -or $_.Name -match "Speech")})) {
+                #Write-Verbose "Adding $LanguageFeaturesObject to $($LanguageFeatureID[0])"
+                $LanguageFeaturesTable.Add($LanguageFeaturesObject) | Out-Null
+            }
+
+            try {
+                $LanguageFeatureTable.Add($LanguageFeatureID[0], $LanguageFeaturesTable)
+            }
+            catch [System.ArgumentException] {
+                # This is fine, we expect duplicates due to how the FoD disk is created. 
+            } 
         }
 
         try {
@@ -164,12 +201,24 @@ Process {
             }            
 
             try {
-                # Copy language pack files to content lilbrary source location
+                # Copy language pack files to content library source location
                 Write-Verbose -Message "Copying file $($LanguagePackTable[$LanguagePack].Name) to: $($LanguagePackSubFolder)"
                 Copy-Item -LiteralPath $LanguagePackTable[$LanguagePack].FullName -Destination $LanguagePackSubFolder -ErrorAction Stop -Verbose:$false
             }
             catch [System.Exception] {
                 Write-Warning -Message "Unable to copy Language Pack file. Error message: $($_.Exception.Message)" ; break
+            }
+
+            try {
+                # Copy Feature on Demand files to content library source location
+                foreach ($LanguageFeatureFile in $LanguageFeatureTable.$LanguagePack)
+                {
+                    Write-Verbose -Message "Copying file $($LanguageFeatureFile.Name) to: $($LanguagePackSubFolder)"
+                    Copy-Item -LiteralPath $LanguageFeatureFile.FullName -Destination $LanguagePackSubFolder -ErrorAction Stop -Verbose:$false
+                }
+            }
+            catch [System.Exception] {
+                Write-Warning -Message "Unable to copy Language Feature file. Error message: $($_.Exception.Message)" ; break
             }
 
             try {
