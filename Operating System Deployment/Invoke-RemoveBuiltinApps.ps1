@@ -26,8 +26,9 @@ Write-LogEntry -Value "Starting built-in AppxPackage, AppxProvisioningPackage an
 $AppArrayList = Get-AppxPackage -PackageTypeFilter Bundle -AllUsers | Select-Object -Property Name, PackageFullName | Sort-Object -Property Name
 
 # White list of appx packages to keep installed
-$WhiteListedApps = @(
-    "Microsoft.DesktopAppInstaller", 
+$WhiteListedApps = New-Object -TypeName System.Collections.ArrayList
+$WhiteListedApps.AddRange(@(
+    "Microsoft.DesktopAppInstaller",
     "Microsoft.Messaging", 
     "Microsoft.MSPaint",
     "Microsoft.Windows.Photos",
@@ -39,7 +40,16 @@ $WhiteListedApps = @(
     "Microsoft.WindowsCommunicationsApps", # Mail, Calendar etc
     "Microsoft.WindowsSoundRecorder", 
     "Microsoft.WindowsStore"
-)
+))
+
+# Windows 10 version 1809
+$WhiteListedApps.AddRange(@(
+    "Microsoft.ScreenSketch",
+    "Microsoft.HEIFImageExtension",
+    "Microsoft.VP9VideoExtensions",
+    "Microsoft.WebMediaExtensions",
+    "Microsoft.WebpImageExtension"
+))
 
 # Loop through the list of appx packages
 foreach ($App in $AppArrayList) {

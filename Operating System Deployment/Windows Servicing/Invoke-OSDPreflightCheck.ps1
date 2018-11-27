@@ -23,6 +23,7 @@
 	1.0.0 - (2018-09-07) Script created
 	1.0.1 - (2018-09-07) Changed parameters to switches
 	1.0.2 - (2018-09-12) Renamed battery check to power check and updated the logic around detecting if machine has the AC power connected
+	1.0.3 - (2018-11-26) Updated the DiskFreeSpace check to create a TS variable named 'OSDCleanDisk' if free disk space is below the specified amount of GB
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -204,6 +205,7 @@ Process {
 			}
 			else {
 				$TSEnvironment.Value("OSDPLDiskSpacePass") = $false
+				$TSEnvironment.Value("OSDCleanDisk") = $true
 				Write-CMLogEntry -Value "$($LogDescription) Drive C: ($($OSDriveInfo.VolumeName)) does not meet minimum free disk space reserve of ($($MinDiskValue)GB)" -Severity 3
 			}
 
