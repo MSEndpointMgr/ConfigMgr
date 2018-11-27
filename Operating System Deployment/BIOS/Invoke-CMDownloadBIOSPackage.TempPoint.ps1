@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2018-11-27
+    Updated:     2018-05-29
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -54,7 +54,6 @@
 						 Added support for a DebugMode switch for running script outside of a task sequence for BIOS package detection
 	2.0.6 - (2018-05-29) Added logic to all for the fallback to model name matching for BIOS update packages
 						 Additional logging output
-	2.0.7 - (2018-11-27) Added logic for HP BIOS version differences in new models
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -336,18 +335,8 @@ Process {
 		if ($ComputerManufacturer -match "Hewlett-Packard") {
 			# Obtain current BIOS release
 			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select-Object -Property *)
-			# Update version formatting
-			$AvailableBIOSVersion = $AvailableBIOSVersion.TrimEnd(".")
-			# Detect new versus old BIOS formats
-			switch -wildcard ($($CurrentBIOSProperties.SMBIOSBIOSVersion)) {
-				"*ver*" {
-					$CurrentBIOSVersion = [System.Version]::Parse(((($CurrentBIOSProperties.SMBIOSBIOSVersion).Trim($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0])).TrimStart(".")).Trim())
-				}
-				default {
-					$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
-				}
-			}
-			# Output version details
+			
+			#$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
 			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
 			Write-CMLogEntry -Value "Available BIOS release deteced as $AvailableBIOSVersion." -Severity 1
 			
