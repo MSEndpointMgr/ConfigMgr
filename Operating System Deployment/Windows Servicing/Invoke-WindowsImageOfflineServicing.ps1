@@ -80,6 +80,7 @@
     1.0.1 - (2018-09-16) Added support to remove appx packages from OS image
     1.0.2 - (2018-10-23) Added support for detecting and applying Dynamic Updates, both Setup Updates (DUSU) and Component Updates (DUCU). 
                          Simplified script parameters, OSMediaFilesPath, MountPathRoot and UpdateFilesRoot are now all replaced with OSMediaFilesRoot parameter.
+    1.0.3 - (2018-11-28) Fixed an issue where the output would show the wrong backup paths for install.wim and boot.wim
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -651,12 +652,14 @@ Process {
 
             if ($PSCmdlet.ParameterSetName -like "ImageServicing") {
                 # Backup existing OS image install.wim file to temporary location
-                Write-Verbose -Message " - Backing up install.wim from OS media source files location: $($OSMediaFilesPath)"
-                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Destination (Join-Path -Path $ImagePathTemp -ChildPath "install_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak") -Force -ErrorAction Stop
+                $OSImageTempBackupPath = (Join-Path -Path $ImagePathTemp -ChildPath "install_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak")
+                Write-Verbose -Message " - Backing up install.wim from OS media source files location: $($OSImageTempBackupPath)"
+                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Destination $OSImageTempBackupPath -Force -ErrorAction Stop
 
                 # Backup existing OS image boot.wim file to temporary location
-                Write-Verbose -Message " - Backing up boot.wim from OS media source files location: $($OSMediaFilesPath)"
-                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Destination (Join-Path -Path $ImagePathTemp -ChildPath "boot_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak") -Force -ErrorAction Stop
+                $BootImageTempBackupPath = (Join-Path -Path $ImagePathTemp -ChildPath "boot_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak")
+                Write-Verbose -Message " - Backing up boot.wim from OS media source files location: $($BootImageTempBackupPath)"
+                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Destination $BootImageTempBackupPath -Force -ErrorAction Stop
             }
 
             Write-Verbose -Message "[Backup]: Successfully completed phase"
