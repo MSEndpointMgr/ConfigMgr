@@ -10,7 +10,7 @@
     more than one Other updates, but for the Cumulative Update and Service Stack Updates, the latest file in the CU and SSU folder will automatically be selected
     by the script.
 
-    Original servicing logic is using the same as published here:
+    Original servicing logic is using the same as published here, with a few modifications:
     https://deploymentresearch.com/Research/Post/672/Windows-10-Servicing-Script-Creating-the-better-In-Place-upgrade-image
 
     Requirements for running this script:
@@ -24,7 +24,7 @@
     - .\SSU (place latest Service Stack Update msu file here)
     - .\Other (place latest e.g. Adobe Flash Player msu file here)
 
-    This script has been tested on the following platforms:
+    This script has been tested and executed on the following platforms and requires PowerShell 5.x:
     - Windows Server 2012 R2
     - Windows Server 2016
 
@@ -81,6 +81,7 @@
     1.0.2 - (2018-10-23) Added support for detecting and applying Dynamic Updates, both Setup Updates (DUSU) and Component Updates (DUCU). 
                          Simplified script parameters, OSMediaFilesPath, MountPathRoot and UpdateFilesRoot are now all replaced with OSMediaFilesRoot parameter.
     1.0.3 - (2018-11-28) Fixed an issue where the output would show the wrong backup paths for install.wim and boot.wim
+    1.0.4 - (2018-11-30) Removed -Optimize parameter for Mount-WindowsImage cmdlets to support 1809 (and perhaps above). From 1803 and above it's actually slower according to test performed by David Segura
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -424,6 +425,9 @@ Process {
                 }
             }
         }
+        else {
+            Write-Verbose -Message " - Query for dynamic updates returned empty"
+        }
     
         Write-Verbose -Message "[DynamicUpdateContent]: Successfully completed phase"
     }
@@ -669,7 +673,7 @@ Process {
 
                 # Mount the temporary OS image
                 Write-Verbose -Message " - Mounting temporary OS image file: $($OSImageTempWim)"
-                Mount-WindowsImage -ImagePath $OSImageTempWim -Index 1 -Path $MountPathOSImage -Optimize -ErrorAction Stop | Out-Null
+                Mount-WindowsImage -ImagePath $OSImageTempWim -Index 1 -Path $MountPathOSImage -ErrorAction Stop | Out-Null
     
                 try {
                     if ($SkipServiceStackUpdatePatch -ne $true) {
