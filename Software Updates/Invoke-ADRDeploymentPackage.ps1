@@ -42,8 +42,6 @@ param(
 Begin {}
 Process{
 try{
-$SiteCode = "PR1"
-$ADRName = "Example"
 [wmi]$ADR = (Get-WmiObject -Class SMS_AutoDeployment -Namespace "root/sms/site_$($SiteCode)" | Where-Object -FilterScript {$_.Name -eq $ADRName}).__Path
 Write-Verbose -Message "Got the ADR $($ADR.Name)"
 #GEt the ADR WMIObject that represents the automatic deployment rule
