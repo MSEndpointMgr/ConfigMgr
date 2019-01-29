@@ -56,7 +56,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2018-09-03
+    Updated:     2019-01-29
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
     
@@ -103,6 +103,7 @@
 	2.1.3 - (2018-09-03) Code tweak to Windows 10 version matching process
 	2.1.4 - (2018-09-18) Added support to override the task sequence package ID retrieved from _SMSTSPackageID when the Apply Operating System step is in a child task sequence
 	2.1.5 - (2018-09-18) Updated the computer model detection logic that replaces parts of the string from the PackageName property to retrieve the computer model only
+	2.1.6 - (2019-01-28) Fixed an issue with the recurse injection of drivers for a single detected driver package that was using an unassigned variable
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -152,7 +153,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.5"
+	$ScriptVersion = "2.1.6"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -832,7 +833,7 @@ Process {
 														}
 														"Recurse" {
 															# Apply drivers recursively
-															$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($WindowsImageLocation)\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
+															$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
 															
 															# Validate driver injection
 															if ($ApplyDriverInvocation -eq 0) {
