@@ -12,7 +12,7 @@
     Specify the path where the updates will be downloaded.
 
 .PARAMETER OSBuild
-    Specify the operating system build version, e.g. 1803, 1809 or 1903.
+    Specify a single or multiple operating system build versions, e.g. 1803, 1809 or 1903.
 
 .PARAMETER OSArchitecture
     Specify the operating system architecture, either x64-based or x86-based.
@@ -27,6 +27,9 @@
     # List the latest Cumulative Update, Servicing Stack Update and Adobe Flash Update for Windows 10 version 1809:
     .\Invoke-MSLatestUpdateDownload.ps1 -UpdateType CumulativeUpdate, ServicingStackUpdate, AdobeFlashUpdate -Path "C:\Updates\Win10" -OSBuild "1803" -OSArchitecture "x64-based" -List
 
+    # Download the latest Cumulative Update, Servicing Stack Update and Adobe Flash Update for Windows 10 version 1803 and version 1809:
+    .\Invoke-MSLatestUpdateDownload.ps1 -UpdateType CumulativeUpdate, ServicingStackUpdate, AdobeFlashUpdate -Path "C:\Updates\Win10" -OSBuild "1803", "1809" -OSArchitecture "x64-based"
+
 .NOTES
     FileName:    Invoke-MSLatestUpdateDownload.ps1
     Author:      Nickolaj Andersen
@@ -36,6 +39,7 @@
 
     Version history:
     1.0.0 - (2019-02-13) Script created
+    1.0.1 - (2019-02-13) Fixed a few static values and replaced them with variables. Added support for specifying an array of OSBuilds. File names now also contain the OSBuild version.
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -64,10 +68,10 @@ param(
     })]
     [string]$Path,
 
-    [parameter(Mandatory=$true, HelpMessage="Specify the operating system build version, e.g. 1803, 1809 or 1903.")]
+    [parameter(Mandatory=$true, HelpMessage="Specify a single or multiple operating system build versions, e.g. 1803, 1809 or 1903.")]
     [ValidateNotNullOrEmpty()]
     [ValidatePattern("^(1[789]|2[01])0(3|9)$")]
-    [string]$OSBuild,
+    [string[]]$OSBuild,
 
     [parameter(Mandatory=$false, HelpMessage="Specify the operating system architecture, either x64-based or x86-based.")]
     [ValidateNotNullOrEmpty()]
@@ -387,19 +391,30 @@ Process {
     foreach ($UpdateItem in $UpdateType) {
         switch ($UpdateItem) {
             "CumulativeUpdate" {
-                $Update = Get-MSCumulativeUpdate -OSBuild 1803 -OSArchitecture x64-based
-                $Update | Add-Member -MemberType NoteProperty -Name "Type" -Value $UpdateItem
+                foreach ($OSBuildItem in $OSBuild) {
+                    $Update = Get-MSCumulativeUpdate -OSBuild $OSBuildItem -OSArchitecture $OSArchitecture
+                    $Update | Add-Member -MemberType NoteProperty -Name "Type" -Value $UpdateItem
+                    $Update | Add-Member -MemberType NoteProperty -Name "OSBuild" -Value $OSBuildItem
+                    $UpdateList.Add($Update) | Out-Null
+                }
             }
             "ServicingStackUpdate" {
-                $Update = Get-MSServicingStackUpdate -OSBuild 1803 -OSArchitecture x64-based
-                $Update | Add-Member -MemberType NoteProperty -Name "Type" -Value $UpdateItem
+                foreach ($OSBuildItem in $OSBuild) {
+                    $Update = Get-MSServicingStackUpdate -OSBuild $OSBuildItem -OSArchitecture $OSArchitecture
+                    $Update | Add-Member -MemberType NoteProperty -Name "Type" -Value $UpdateItem
+                    $Update | Add-Member -MemberType NoteProperty -Name "OSBuild" -Value $OSBuildItem
+                    $UpdateList.Add($Update) | Out-Null
+                }
             }
             "AdobeFlashUpdate" {
-                $Update = Get-MSAdobeFlashUpdate -OSBuild 1803 -OSArchitecture x64-based
-                $Update | Add-Member -MemberType NoteProperty -Name "Type" -Value $UpdateItem
+                foreach ($OSBuildItem in $OSBuild) {
+                    $Update = Get-MSAdobeFlashUpdate -OSBuild $OSBuildItem -OSArchitecture $OSArchitecture
+                    $Update | Add-Member -MemberType NoteProperty -Name "Type" -Value $UpdateItem
+                    $Update | Add-Member -MemberType NoteProperty -Name "OSBuild" -Value $OSBuildItem
+                    $UpdateList.Add($Update) | Out-Null
+                }
             }
         }
-        $UpdateList.Add($Update) | Out-Null
     }
     
     # Download updates or list them only
@@ -410,7 +425,7 @@ Process {
         else {
             foreach ($UpdateItem in $UpdateList) {
                 Write-Verbose -Message "Starting download of '$($UpdateItem.Description)' from: $($UpdateItem.DownloadURL)"
-                Start-DownloadFile -URL $UpdateItem.DownloadURL -Path $Path -Name ("Windows10.0-$($UpdateItem.KB)-$($UpdateItem.Type).msu")
+                Start-DownloadFile -URL $UpdateItem.DownloadURL -Path $Path -Name ("Windows10.0-$($UpdateItem.OSBuild)-$($UpdateItem.KB)-$($UpdateItem.Type).msu")
             }
         }
     }
