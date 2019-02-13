@@ -105,6 +105,7 @@
 	2.1.5 - (2018-09-18) Updated the computer model detection logic that replaces parts of the string from the PackageName property to retrieve the computer model only
 	2.1.6 - (2019-01-28) Fixed an issue with the recurse injection of drivers for a single detected driver package that was using an unassigned variable
 	2.1.7 - (2019-02-13) Added support for Windows 10 version 1809 in the Get-OSDetails function
+	2.1.8 - (2019-02-13) Added trimming of manufacturer and models data gathering from WMI
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -154,7 +155,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.7"
+	$ScriptVersion = "2.1.8"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -521,33 +522,33 @@ Process {
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
 		}
 		"*Hewlett-Packard*" {
 			$ComputerManufacturer = "Hewlett-Packard"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
 		}
 		"*Dell*" {
 			$ComputerManufacturer = "Dell"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku.Trim()
 		}
 		"*Lenovo*" {
 			$ComputerManufacturer = "Lenovo"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version).Trim()
 			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 		}
 		"*Panasonic*" {
 			$ComputerManufacturer = "Panasonic Corporation"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
 		}
 		"*Viglen*" {
 			$ComputerManufacturer = "Viglen"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = Get-WmiObject -Class Win32_BaseBoard | Select-Object -ExpandProperty SKU
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-WmiObject -Class Win32_BaseBoard | Select-Object -ExpandProperty SKU).Trim()
 		}
 	}
 	
