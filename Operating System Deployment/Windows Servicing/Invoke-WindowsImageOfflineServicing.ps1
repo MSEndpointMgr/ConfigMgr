@@ -73,7 +73,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2018-10-23
+    Updated:     2019-02-13
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -82,6 +82,7 @@
                          Simplified script parameters, OSMediaFilesPath, MountPathRoot and UpdateFilesRoot are now all replaced with OSMediaFilesRoot parameter.
     1.0.3 - (2018-11-28) Fixed an issue where the output would show the wrong backup paths for install.wim and boot.wim
     1.0.4 - (2018-11-30) Removed -Optimize parameter for Mount-WindowsImage cmdlets to support 1809 (and perhaps above). From 1803 and above it's actually slower according to test performed by David Segura
+    1.0.5 - (2019-02-13) Fixed an issue where WinRE would not be exported correctly after servicing
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -853,9 +854,9 @@ Process {
     
                                                             try {
                                                                 # Move temporary WinRE to back to original source location in OS image
-                                                                Write-Verbose -Message " - Attempting to export temporary WinRE image to OS media source files location"
+                                                                Write-Verbose -Message " - Attempting to export temporary WinRE image to mounted OS image location"
                                                                 Export-WindowsImage -SourceImagePath $OSImageWinRETemp -DestinationImagePath (Join-Path -Path $MountPathOSImage -ChildPath "Windows\System32\Recovery\winre.wim") -SourceName "Microsoft Windows Recovery Environment (x64)" -ErrorAction Stop | Out-Null
-    
+
                                                                 Write-Verbose -Message "[WinREImage]: Successfully completed phase"
                                                                 Write-Verbose -Message "[OSImageExport]: Initiating OS image export servicing phase"
 
