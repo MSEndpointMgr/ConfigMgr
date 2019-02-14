@@ -29,12 +29,13 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2017-07-22
-    Updated:     2017-11-08
+    Updated:     2019-02-14
     
     Version history:
     1.0.0 - (2017-07-22) Script created
     1.0.1 - (2017-10-08) - Added functionality to download the detected language packs
     1.0.2 - (2017-11-08) - Fixed a bug when validating the param value for PackageID
+    1.0.3 - (2019-02-14) - Added capability to set OSDSetupAdditionalUpgradeOptions with required value for configuring setup.exe to install language packs from download location
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -102,7 +103,7 @@ Process {
 	
 	    # Add value to log file
         try {
-	        Add-Content -Value $LogText -LiteralPath $LogFilePath -ErrorAction Stop
+            Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
         }
         catch [System.Exception] {
             Write-Warning -Message "Unable to append log entry to LanguagePackDownload.log file. Error message: $($_.Exception.Message)"
@@ -281,6 +282,11 @@ Process {
 
             if ($DownloadInvocation -eq 0) {
                 Write-CMLogEntry -Value "Language pack package content downloaded successfully" -Severity 1
+
+                # Set task sequence variable for handling adding additional command line options for setup.exe
+                $SetupAdditionalUpgradeOptions = "/InstallLangPacks %OSDLanguagePack01%"
+                Write-CMLogEntry -Value "Attempting to set OSDSetupAdditionalUpgradeOptions task sequence variable with value: $($SetupAdditionalUpgradeOptions)" -Severity 1
+                $TSEnvironment.Value("OSDSetupAdditionalUpgradeOptions") = "$($SetupAdditionalUpgradeOptions)"
             }
             else {
                 Write-CMLogEntry -Value "Language pack package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3 ; exit 1
@@ -296,5 +302,5 @@ Process {
 }
 End {
 	# Reset OSDDownloadContent.exe dependant variables for further use of the task sequence step
-	Invoke-CMResetDownloadContentVariables
+    Invoke-CMResetDownloadContentVariables
 }
