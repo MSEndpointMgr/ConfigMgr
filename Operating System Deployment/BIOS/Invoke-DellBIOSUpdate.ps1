@@ -101,9 +101,9 @@ Process {
     }
 	
 	# Default to task sequence variable set in detection script
-	if (-not([string]::IsNullOrEmpty($TSEnvironment.Value("_OSDBIOSPackage01")))){
+	if (-not([string]::IsNullOrEmpty($TSEnvironment.Value("OSDBIOSPackage01")))){
 		Write-CMLogEntry -Value "Using BIOS package location set in OSDBIOSPackage01 TS variable" -Severity 1
-		$Path = $TSEnvironment.Value("_OSDBIOSPackage01")
+		$Path = $TSEnvironment.Value("OSDBIOSPackage01")
 	}
 	
 	# Run BIOS update process if BIOS package exists
