@@ -29,10 +29,11 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2017-08-15
-    Updated:     2017-08-15
+    Updated:     2018-12-06
     
     Version history:
     1.0.0 - (2017-08-15) Script created
+    1.0.1 - (2018-12-06) Updated the script logic to support all parameter switches being used together and added a new parameter for superseded updates
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -51,6 +52,9 @@ param(
 
     [parameter(Mandatory=$false, HelpMessage="Use this switch to clean Software Updates that are not required on any systems, from the Deployment Package.")]
     [switch]$NonRequiredUpdates,
+
+    [parameter(Mandatory=$false, HelpMessage="Use this switch to clean Software Updates that are superseded, from the Deployment Package.")]
+    [switch]$SupersededUpdates,
 
     [parameter(Mandatory=$false, HelpMessage="Show a progressbar displaying the current operation.")]
     [switch]$ShowProgress
@@ -86,19 +90,37 @@ Process {
         $DeploymentPackage = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class SMS_SoftwareUpdatesPackage -ComputerName $SiteServer -Filter "PackageID = '$($PackageID)'" -ErrorAction Stop
         if ($DeploymentPackage -ne $null) {
             # Construct WQL query
-            $WQLQuery = "SELECT DISTINCT SU.* FROM SMS_SoftwareUpdate AS SU JOIN SMS_CIToContent AS CTC ON SU.CI_ID = CTC.CI_ID JOIN SMS_PackageToContent AS PTC ON PTC.ContentID=CTC.ContentID WHERE PTC.PackageID = '$($DeploymentPackage.PackageID)' AND SU.IsContentProvisioned = 1"
+            $WQLQuery = "SELECT DISTINCT SU.* FROM SMS_SoftwareUpdate AS SU JOIN SMS_CIToContent AS CTC ON SU.CI_ID = CTC.CI_ID JOIN SMS_PackageToContent AS PTC ON PTC.ContentID=CTC.ContentID WHERE (PTC.PackageID = '$($DeploymentPackage.PackageID)' AND SU.IsContentProvisioned = 1)"
             
+            if (($PSBoundParameters.ContainsKey("NonDeployedUpdates")) -or ($PSBoundParameters.ContainsKey("NonRequiredUpdates")) -or ($PSBoundParameters.ContainsKey("SupersededUpdates"))) {
+                $WQLQuery = -join @($WQLQuery, " AND (")
+            }
+
             # Append WQL query to include Software Update instances that are not deployed
             if ($PSBoundParameters["NonDeployedUpdates"]) {
-                $WQLQuery = -join @($WQLQuery, " AND SU.IsDeployed = 0")
+                Write-Verbose -Message "Extending the WQL query with non-deployed updates"
+                $WQLQuery = -join @($WQLQuery, "SU.IsDeployed = 0 OR ")
             }
 
             # Append WQL query to include Software Update instances that are not required on any systems
             if ($PSBoundParameters["NonRequiredUpdates"]) {
-                $WQLQuery = -join @($WQLQuery, " AND SU.NumMissing = 0")
+                Write-Verbose -Message "Extending the WQL query with missing updates"
+                $WQLQuery = -join @($WQLQuery, "SU.NumMissing = 0 OR ")
             }
+
+            # Append WQL query to include Software Update instances that are superseded
+            if ($PSBoundParameters["SupersededUpdates"]) {
+                Write-Verbose -Message "Extending the WQL query with superseded updates"
+                $WQLQuery = -join @($WQLQuery, "SU.IsSuperseded = 1 OR ")
+            }      
+            
+            if (($PSBoundParameters.ContainsKey("NonDeployedUpdates")) -or ($PSBoundParameters.ContainsKey("NonRequiredUpdates")) -or ($PSBoundParameters.ContainsKey("SupersededUpdates"))) {
+                $WQLQuery = $WQLQuery.Substring(0, $WQLQuery.Length-4)
+                $WQLQuery = -join @($WQLQuery, ")")
+            }            
             
             # Determine Software Update instances matching non-required and non-deployed criteria
+            Write-Verbose -Message "WQL query: $($WQLQuery)"
             $SoftwareUpdates = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -ComputerName $SiteServer -Query $WQLQuery -ErrorAction Stop | Select-Object -Property CI_ID, LocalizedDisplayName
 
             if ($SoftwareUpdates -ne $null) {

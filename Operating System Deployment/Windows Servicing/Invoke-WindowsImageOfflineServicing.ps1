@@ -10,7 +10,7 @@
     more than one Other updates, but for the Cumulative Update and Service Stack Updates, the latest file in the CU and SSU folder will automatically be selected
     by the script.
 
-    Original servicing logic is using the same as published here:
+    Original servicing logic is using the same as published here, with a few modifications:
     https://deploymentresearch.com/Research/Post/672/Windows-10-Servicing-Script-Creating-the-better-In-Place-upgrade-image
 
     Requirements for running this script:
@@ -24,7 +24,7 @@
     - .\SSU (place latest Service Stack Update msu file here)
     - .\Other (place latest e.g. Adobe Flash Player msu file here)
 
-    This script has been tested on the following platforms:
+    This script has been tested and executed on the following platforms and requires PowerShell 5.x:
     - Windows Server 2012 R2
     - Windows Server 2016
 
@@ -73,13 +73,16 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2018-10-23
+    Updated:     2019-02-13
     
     Version history:
     1.0.0 - (2018-09-12) Script created
     1.0.1 - (2018-09-16) Added support to remove appx packages from OS image
     1.0.2 - (2018-10-23) Added support for detecting and applying Dynamic Updates, both Setup Updates (DUSU) and Component Updates (DUCU). 
                          Simplified script parameters, OSMediaFilesPath, MountPathRoot and UpdateFilesRoot are now all replaced with OSMediaFilesRoot parameter.
+    1.0.3 - (2018-11-28) Fixed an issue where the output would show the wrong backup paths for install.wim and boot.wim
+    1.0.4 - (2018-11-30) Removed -Optimize parameter for Mount-WindowsImage cmdlets to support 1809 (and perhaps above). From 1803 and above it's actually slower according to test performed by David Segura
+    1.0.5 - (2019-02-13) Fixed an issue where WinRE would not be exported correctly after servicing
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -423,6 +426,9 @@ Process {
                 }
             }
         }
+        else {
+            Write-Verbose -Message " - Query for dynamic updates returned empty"
+        }
     
         Write-Verbose -Message "[DynamicUpdateContent]: Successfully completed phase"
     }
@@ -651,12 +657,14 @@ Process {
 
             if ($PSCmdlet.ParameterSetName -like "ImageServicing") {
                 # Backup existing OS image install.wim file to temporary location
-                Write-Verbose -Message " - Backing up install.wim from OS media source files location: $($OSMediaFilesPath)"
-                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Destination (Join-Path -Path $ImagePathTemp -ChildPath "install_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak") -Force -ErrorAction Stop
+                $OSImageTempBackupPath = (Join-Path -Path $ImagePathTemp -ChildPath "install_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak")
+                Write-Verbose -Message " - Backing up install.wim from OS media source files location: $($OSImageTempBackupPath)"
+                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Destination $OSImageTempBackupPath -Force -ErrorAction Stop
 
                 # Backup existing OS image boot.wim file to temporary location
-                Write-Verbose -Message " - Backing up boot.wim from OS media source files location: $($OSMediaFilesPath)"
-                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Destination (Join-Path -Path $ImagePathTemp -ChildPath "boot_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak") -Force -ErrorAction Stop
+                $BootImageTempBackupPath = (Join-Path -Path $ImagePathTemp -ChildPath "boot_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak")
+                Write-Verbose -Message " - Backing up boot.wim from OS media source files location: $($BootImageTempBackupPath)"
+                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Destination $BootImageTempBackupPath -Force -ErrorAction Stop
             }
 
             Write-Verbose -Message "[Backup]: Successfully completed phase"
@@ -666,7 +674,7 @@ Process {
 
                 # Mount the temporary OS image
                 Write-Verbose -Message " - Mounting temporary OS image file: $($OSImageTempWim)"
-                Mount-WindowsImage -ImagePath $OSImageTempWim -Index 1 -Path $MountPathOSImage -Optimize -ErrorAction Stop | Out-Null
+                Mount-WindowsImage -ImagePath $OSImageTempWim -Index 1 -Path $MountPathOSImage -ErrorAction Stop | Out-Null
     
                 try {
                     if ($SkipServiceStackUpdatePatch -ne $true) {
@@ -846,9 +854,9 @@ Process {
     
                                                             try {
                                                                 # Move temporary WinRE to back to original source location in OS image
-                                                                Write-Verbose -Message " - Attempting to export temporary WinRE image to OS media source files location"
+                                                                Write-Verbose -Message " - Attempting to export temporary WinRE image to mounted OS image location"
                                                                 Export-WindowsImage -SourceImagePath $OSImageWinRETemp -DestinationImagePath (Join-Path -Path $MountPathOSImage -ChildPath "Windows\System32\Recovery\winre.wim") -SourceName "Microsoft Windows Recovery Environment (x64)" -ErrorAction Stop | Out-Null
-    
+
                                                                 Write-Verbose -Message "[WinREImage]: Successfully completed phase"
                                                                 Write-Verbose -Message "[OSImageExport]: Initiating OS image export servicing phase"
 
