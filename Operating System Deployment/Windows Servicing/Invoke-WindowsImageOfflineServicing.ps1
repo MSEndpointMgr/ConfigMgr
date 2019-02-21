@@ -19,10 +19,21 @@
     - Supported operating system editions: Enterprise, Education
     - A folder containing the Windows source files extracted from an ISO
 
-    Required folder structure for location specified for UpdateFilesRoot:
-    - .\CU (place latest Cumulative Update msu file here)
-    - .\SSU (place latest Service Stack Update msu file here)
-    - .\Other (place latest e.g. Adobe Flash Player msu file here)
+    Required folder structure should exist beneath the location specified for UpdateFilesRoot:
+    - Source (this folder should contain the OS media source files used for the Operating System Upgrade Package)
+    - Updates (see details in next section)
+
+    Required folder structure should exist within the Updates folder:
+    - Updates\CU (place latest Cumulative Update msu file here)
+    - Updates\SSU (place latest Service Stack Update msu file here)
+    - Updates\Other (place latest e.g. Adobe Flash Player msu file here)
+
+    An example of the complete required folder structure, where E:\CMSource\OSD\OSUpgrade\W10E1809X64 has been specified for the UpdateFilesRoot parameter:
+    <UpdateFilesRoot>\Source
+    <UpdateFilesRoot>\Updates
+    <UpdateFilesRoot>\Updates\CU
+    <UpdateFilesRoot>\Updates\SSU
+    <UpdateFilesRoot>\Updates\Other
 
     This script has been tested and executed on the following platforms and requires PowerShell 5.x:
     - Windows Server 2012 R2
@@ -83,6 +94,7 @@
     1.0.3 - (2018-11-28) Fixed an issue where the output would show the wrong backup paths for install.wim and boot.wim
     1.0.4 - (2018-11-30) Removed -Optimize parameter for Mount-WindowsImage cmdlets to support 1809 (and perhaps above). From 1803 and above it's actually slower according to test performed by David Segura
     1.0.5 - (2019-02-13) Fixed an issue where WinRE would not be exported correctly after servicing
+    1.0.6 - (2019-02-19) Updated the help section to better explain the required folder structure (thanks to @JankeSkanke for pointing this out)
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
