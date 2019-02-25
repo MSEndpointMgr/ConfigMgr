@@ -32,7 +32,7 @@ function Start-CMTraceLog
         # Directory Exists, do nothing    
     }
 
-    return 0;
+    # return 0;
 }
 
 function Write-CMTraceLog
@@ -171,20 +171,20 @@ foreach ($App in $AppArrayList)
             try
             {
                 # Write-LogEntry -Value "Removing AppxPackage: $($AppPackageFullName)"
-                Write-CMTraceLog -Message "   Removing AppxPackage: $($AppPackageFullName)" -Component "Main" -Type "Info"
+                Write-CMTraceLog -Message "   Removing AppxPackage: $($App.Name)" -Component "Main" -Type "Info"
 
                 Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
             }
             catch [System.Exception]
             {
                 # Write-LogEntry -Value "Removing AppxPackage '$($AppPackageFullName)' failed: $($_.Exception.Message)"
-                Write-CMTraceLog -Message "   Removing AppxPackage '$($AppPackageFullName)' failed: $($_.Exception.Message)" -Component "Main" -Type "Error"
+                Write-CMTraceLog -Message "   Removing AppxPackage $($App.Name) failed: $($_.Exception.Message)" -Component "Main" -Type "Error"
             }
         }
         else
         {
-            # Write-LogEntry -Value "Unable to locate AppxPackage: $($AppPackageFullName)"
-            Write-CMTraceLog -Message "   Unable to locate AppxPackage: $($AppPackageFullName)" -Component "Main" -Type "Error"
+            # Write-LogEntry -Value "Unable to locate AppxPackage: $($App.Name)"
+            Write-CMTraceLog -Message "   Unable to locate AppxPackage: $($App.Name)" -Component "Main" -Type "Error"
         }
 
         # Attempt to remove AppxProvisioningPackage
@@ -193,20 +193,20 @@ foreach ($App in $AppArrayList)
             try
             {
                 # Write-LogEntry -Value "Removing AppxProvisioningPackage: $($AppProvisioningPackageName)"
-                Write-CMTraceLog -Message "   Removing AppxProvisioningPackage: $($AppProvisioningPackageName)" -Component "Main" -Type "Info"
+                Write-CMTraceLog -Message "   Removing AppxProvisioningPackage for: $($App.Name)" -Component "Main" -Type "Info"
 
                 Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
             }
             catch [System.Exception]
             {
                 # Write-LogEntry -Value "Removing AppxProvisioningPackage '$($AppProvisioningPackageName)' failed: $($_.Exception.Message)"
-                Write-CMTraceLog -Message "   Removing AppxProvisioningPackage '$($AppProvisioningPackageName)' failed: $($_.Exception.Message)" -Component "Main" -Type "Error"
+                Write-CMTraceLog -Message "   Removing AppxProvisioningPackage for $($App.Name) failed: $($_.Exception.Message)" -Component "Main" -Type "Error"
             }
         }
         else
         {
-            Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
-            Write-CMTraceLog -Message "   Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)" -Component "Main" -Type "Error"
+            # Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
+            Write-CMTraceLog -Message "   Unable to locate AppxProvisioningPackage for: $($App.Name)" -Component "Main" -Type "Error"
         }
     }
 }
