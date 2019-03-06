@@ -4,36 +4,34 @@
 
 .DESCRIPTION
     This script will service Windows image from a source files location with the latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player.
-    There are three types of updates the script handles, Cumulative Updates, Service Stack Updates and Other updates. A Cumulative Update is required for the script
-    to continue with the servicing of the Windows image. Service Stack Updates and Other updates are not required, however for a Cumulative Update to 
-    successfully be applied, the latest Service Stack Update is required (either already applied to the image, or added in the SSU folder). There can be 
-    more than one Other updates, but for the Cumulative Update and Service Stack Updates, the latest file in the CU and SSU folder will automatically be selected
-    by the script.
+    There are three types of updates the script handles and can automatically download:
+     - Cumulative Updates
+     - Service Stack Updates
+     - Other updates (also known as the Adobe Flash Player updates)
 
     Original servicing logic is using the same as published here, with a few modifications:
     https://deploymentresearch.com/Research/Post/672/Windows-10-Servicing-Script-Creating-the-better-In-Place-upgrade-image
 
     Requirements for running this script:
     - Access to Windows ADK locally installed on the machine where executed
-    - It's not supported to run this script with UNC paths
+    - Access to a SMS Provider in a ConfigMgr hierarchy or stand-alone site
+    - UNC paths are not supported
+    - Folder containing the Windows source files extracted from an ISO
     - Supported operating system editions: Enterprise, Education
-    - A folder containing the Windows source files extracted from an ISO
 
-    Required folder structure should exist beneath the location specified for UpdateFilesRoot:
+    Required folder structure should exist beneath the location specified for the OSMediaFilesRoot parameter:
     - Source (this folder should contain the OS media source files used for the Operating System Upgrade Package)
-    - Updates (see details in next section)
 
-    Required folder structure should exist within the Updates folder:
-    - Updates\CU (place latest Cumulative Update msu file here)
-    - Updates\SSU (place latest Service Stack Update msu file here)
-    - Updates\Other (place latest e.g. Adobe Flash Player msu file here)
-
-    An example of the complete required folder structure, where E:\CMSource\OSD\OSUpgrade\W10E1809X64 has been specified for the UpdateFilesRoot parameter:
-    <UpdateFilesRoot>\Source
-    <UpdateFilesRoot>\Updates
-    <UpdateFilesRoot>\Updates\CU
-    <UpdateFilesRoot>\Updates\SSU
-    <UpdateFilesRoot>\Updates\Other
+    An example of the complete folder structure created by the script, when E:\CMSource\OSD\OSUpgrade\W10E1809X64 has been specified for the OSMediaFilesRoot parameter:
+    <OSMediaFilesRoot>\Source (created manually, not by the script)
+    <OSMediaFilesRoot>\Mount
+    <OSMediaFilesRoot>\Mount\OSImage
+    <OSMediaFilesRoot>\Mount\BootImage
+    <OSMediaFilesRoot>\Mount\Temp
+    <OSMediaFilesRoot>\Mount\WinRE
+    <OSMediaFilesRoot>\Updates
+    <OSMediaFilesRoot>\Updates\DUSU
+    <OSMediaFilesRoot>\Updates\DUCU
 
     This script has been tested and executed on the following platforms and requires PowerShell 5.x:
     - Windows Server 2012 R2
@@ -65,26 +63,26 @@
 
 .EXAMPLE
     # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player:
-    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64"
+    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -OSVersion 1803 -OSArchitecture x64
 
     # Service a Windows Education image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player:
-    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -OSEdition "Education"
+    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -OSVersion 1803 -OSArchitecture x64 -OSEdition "Education"
 
     # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player and include .NET Framework 3.5.1:
-    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -IncludeNetFramework
+    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -OSVersion 1803 -OSArchitecture x64 -IncludeNetFramework
 
     # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player and include .NET Framework 3.5.1 and remove provisioned Appx packages:
-    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -IncludeNetFramework -RemoveAppxPackages
+    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -OSVersion 1803 -OSArchitecture x64 -IncludeNetFramework -RemoveAppxPackages
 
     # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, Adobe Flash Player and Dynamic Updates:
-    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -IncludeDynamicUpdates -OSVersion 1803 -OSArchitecture x64
+    .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1803X64" -OSVersion 1803 -OSArchitecture x64 -IncludeDynamicUpdates
 
 .NOTES
     FileName:    Invoke-WindowsImageOfflineServicing.ps1
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2019-02-13
+    Updated:     2019-02-20
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -95,6 +93,10 @@
     1.0.4 - (2018-11-30) Removed -Optimize parameter for Mount-WindowsImage cmdlets to support 1809 (and perhaps above). From 1803 and above it's actually slower according to test performed by David Segura
     1.0.5 - (2019-02-13) Fixed an issue where WinRE would not be exported correctly after servicing
     1.0.6 - (2019-02-19) Updated the help section to better explain the required folder structure (thanks to @JankeSkanke for pointing this out)
+    1.0.7 - (2019-02-19) Fixed an issue where Dynamic Updates would be attempted to copied into the OS media source folder structure, even if the parameter switch was not specified
+    1.1.0 - (2019-02-20) Added support to automatically download the latest Cumulative Update, Servicing Stack Update and Adobe Flash Player update for the specified OSVersion and OSArchitecture.
+                         This change requires access to a SMS Provider where the latest update information can be accessed. Updated the help section with information changes to the folder structure that
+                         has significantly been reduced. From this version and onwards the script will automatically create all required folders.
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -137,12 +139,14 @@ param(
     [parameter(Mandatory=$true, ParameterSetName="DynamicUpdates", HelpMessage="Apply Dynamic Updates to serviced Windows image source files.")]
     [switch]$IncludeDynamicUpdates,   
 
-    [parameter(Mandatory=$true, ParameterSetName="DynamicUpdates", HelpMessage="Specify the operating system version being serviced.")]
+    [parameter(Mandatory=$true, ParameterSetName="ImageServicing", HelpMessage="Specify the operating system version being serviced.")]
+    [parameter(Mandatory=$true, ParameterSetName="DynamicUpdates")]
     [ValidateNotNullOrEmpty()]
     [ValidateSet("1703", "1709", "1803", "1809", "1903", "1909", "2003", "2009", "2103", "2109")]
     [string]$OSVersion,
 
-    [parameter(Mandatory=$true, ParameterSetName="DynamicUpdates", HelpMessage="Specify the operating system architecture being serviced.")]
+    [parameter(Mandatory=$true, ParameterSetName="ImageServicing", HelpMessage="Specify the operating system architecture being serviced.")]
+    [parameter(Mandatory=$true, ParameterSetName="DynamicUpdates")]
     [ValidateNotNullOrEmpty()]
     [ValidateSet("x64", "x86")]
     [string]$OSArchitecture = "x64",    
@@ -230,7 +234,6 @@ Process {
     }
 
     function Start-DownloadFile {
-        [CmdletBinding(SupportsShouldProcess=$true)]
         param(
             [parameter(Mandatory=$true, HelpMessage="URL for the file to be downloaded.")]
             [ValidateNotNullOrEmpty()]
@@ -269,18 +272,72 @@ Process {
             # Dispose of the WebClient object
             $WebClient.Dispose()
         }
+    }
+
+    function Invoke-MSUpdateItemDownload {
+        [CmdletBinding(SupportsShouldProcess=$true)]
+        param(
+            [parameter(Mandatory=$true, HelpMessage="Specify the path to where the update item will be downloaded.")]
+            [ValidateNotNullOrEmpty()]
+            [string]$FilePath,
+        
+            [parameter(Mandatory=$true, HelpMessage="Specify the path to where the update item will be downloaded.")]
+            [ValidateNotNullOrEmpty()]
+            [ValidateSet("Cumulative Update", "Servicing Stack Update", "Adobe Flash Player", ".NET Framework")]
+            [string]$UpdateType
+        )
+    
+        $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter "LocalizedCategoryInstanceNames = 'Windows 10'" -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
+        if ($UpdateItem -ne $null) {
+            # Determine the ContentID instances associated with the update instance
+            $UpdateItemContentID = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIToContent -ComputerName $SiteServer -Filter "CI_ID = $($UpdateItem.CI_ID)" -ErrorAction Stop
+            if ($UpdateItemContentID -ne $null) {
+                # Get the content files associated with current Content ID
+                $UpdateItemContent = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIContentFiles -ComputerName $SiteServer -Filter "ContentID = $($UpdateItemContentID.ContentID)" -ErrorAction Stop
+                if ($UpdateItemContent -ne $null) {
+                    # Create new custom object for the update content
+                    $PSObject = [PSCustomObject]@{
+                        "DisplayName" = $UpdateItem.LocalizedDisplayName
+                        "ArticleID" = $UpdateItem.ArticleID
+                        "FileName" = $UpdateItemContent.FileName.Insert($UpdateItemContent.FileName.Length-4, "-$($OSVersion)-$($UpdateType.Replace(' ', ''))")
+                        "SourceURL" = $UpdateItemContent.SourceURL
+                        "DateRevised" = [System.Management.ManagementDateTimeConverter]::ToDateTime($UpdateItem.DateRevised)
+                    }
+    
+                    try {
+                        # Start the download of the update item
+                        Write-Verbose -Message " - Downloading update item '$($UpdateType)' content from: $($PSObject.SourceURL)"
+                        Start-DownloadFile -URL $PSObject.SourceURL -Path $FilePath -Name $PSObject.FileName -ErrorAction Stop
+                        Write-Verbose -Message " - Completed download successfully and renamed file to: $($PSObject.FileName)"
+                        return 0
+                    }
+                    catch [System.Exception] {
+                        Write-Warning -Message "Unable to download update item content. Error message: $($_.Exception.Message)"
+                        return 1
+                    }
+                }
+                else {
+                    Write-Warning -Message " - Unable to determine update content instance for CI_ID: $($UpdateItemContentID.ContentID)"
+                    return 1
+                }
+            }
+            else {
+                Write-Warning -Message " - Unable to determine ContentID instance for CI_ID: $($UpdateItem.CI_ID)"
+                return 1
+            }
+        }
+        else {
+            Write-Warning -Message " - Unable to locate update item from SMS Provider for update type: $($UpdateType)"
+            return 2
+        }
     }    
 
     # PowerShell variables
     $ProgressPreference = "SilentlyContinue"
 
-    # Define skip section variables
-    $SkipOtherPatch = $false
-    $SkipServiceStackUpdatePatch = $false
-
     # White list of Appx packages to keep in the serviced image
     $WhiteListedApps = @(
-        "Microsoft.DesktopAppInstaller", 
+        "Microsoft.DesktopAppInstaller",
         "Microsoft.Messaging", 
         "Microsoft.MSPaint",
         "Microsoft.Windows.Photos",
@@ -291,7 +348,12 @@ Process {
         "Microsoft.WindowsCalculator", 
         "Microsoft.WindowsCommunicationsApps", # Mail, Calendar etc
         "Microsoft.WindowsSoundRecorder", 
-        "Microsoft.WindowsStore"
+        "Microsoft.WindowsStore",
+        "Microsoft.ScreenSketch",
+        "Microsoft.HEIFImageExtension",
+        "Microsoft.VP9VideoExtensions",
+        "Microsoft.WebMediaExtensions",
+        "Microsoft.WebpImageExtension"
     )
 
     # Construct required variables for content location
@@ -316,10 +378,105 @@ Process {
     }
 
     Write-Verbose -Message "[Environment]: Successfully completed phase"
+    Write-Verbose -Message "[Content]: Initiating content requirements phase"
+
+    # Validate Source subfolder exist
+    if (-not(Test-Path -Path $OSMediaFilesPath)) {
+        Write-Warning -Message "Failed to locate required Source subfolder in: $($OSMediaFilesRoot)"; break
+    }
+
+    # Validate Updates subfolder exist
+    if (-not(Test-Path -Path $UpdateFilesRoot)) {
+        New-Item -Path $OSMediaFilesRoot -Name "Updates" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the Updates subfolder in in: $($OSMediaFilesRoot)"
+    }
+
+    # Create Mount subfolder
+    if (-not(Test-Path -Path $MountPathRoot)) {
+        New-Item -Path $OSMediaFilesRoot -Name "Mount" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the Mount subfolder in: $($OSMediaFilesRoot)"
+    }
+
+    # Attempt to cleanup any existing update item content files
+    $UpdateItemContentFiles = Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*.cab" -ErrorAction Stop
+    if ($UpdateItemContentFiles -ne $null) {
+        foreach ($UpdateItemContentFile in $UpdateItemContentFiles) {
+            Write-Verbose -Message " - Attempting to remove existing update item content file: $($UpdateItemContentFile.Name)"
+            switch -Regex ($UpdateItemContentFile.Name) {
+                ".*ServicingStackUpdate.*" {
+                    Write-Verbose -Message " - Existing Servicing Stack Update content file detected, will not remove"
+                    $ServiceStackUpdateExists = $true
+                }
+                default {
+                    Remove-Item -Path $UpdateItemContentFile.FullName -Force -ErrorAction Stop
+                }
+            }
+        }
+    }
+
+    # Create OS image mount path subfolder
+    $MountPathOSImage = Join-Path -Path $MountPathRoot -ChildPath "OSImage"
+    if (-not(Test-Path -Path $MountPathOSImage)) {
+        New-Item -Path $MountPathRoot -Name "OSImage" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the OS image mount subfolder: $($MountPathOSImage)"
+    }
+
+    # Create boot image mount path sub folder
+    $MountPathBootImage = Join-Path -Path $MountPathRoot -ChildPath "BootImage"
+    if (-not(Test-Path -Path $MountPathBootImage)) {
+        New-Item -Path $MountPathRoot -Name "BootImage" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the boot image mount subfolder: $($MountPathBootImage)"
+    }
+
+    # Create boot image mount path sub folder
+    $MountPathWinRE = Join-Path -Path $MountPathRoot -ChildPath "WinRE"
+    if (-not(Test-Path -Path $MountPathWinRE)) {
+        New-Item -Path $MountPathRoot -Name "WinRE" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the WinRE mount subfolder: $($MountPathWinRE)"
+    }
+
+    # Create temp mount path sub folder
+    $ImagePathTemp = Join-Path -Path $MountPathRoot -ChildPath "Temp"
+    if (-not(Test-Path -Path $ImagePathTemp)) {
+        New-Item -Path $MountPathRoot -Name "Temp" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the temp image subfolder: $($ImagePathTemp)"
+    }
+
+    # Validate specified OS media files path contains required install.wim file
+    $OSInstallWim = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim"
+    if (-not(Test-Path -Path $OSInstallWim)) {
+        Write-Warning -Message "Unable to locate install.wim file from specified OS media file location"; break
+    }
+
+    # Validate specified OS media files path contains required boot.wim file
+    $OSBootWim = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim"
+    if (-not(Test-Path -Path $OSBootWim)) {
+        Write-Warning -Message "Unable to locate boot.wim file from specified OS media file location"; break
+    }
+
+    # Download update item content
+    $UpdateItemTypeList = @("Cumulative Update", "Servicing Stack Update" , "Adobe Flash Player")
+    foreach ($UpdateItemType in $UpdateItemTypeList) {
+        $Invocation = Invoke-MSUpdateItemDownload -FilePath $UpdateFilesRoot -UpdateType $UpdateItemType
+        switch ($Invocation) {
+            0 {
+                Write-Verbose -Message " - Successfully downloaded update item content file for update type: $($UpdateItemType)"
+            }
+            1 {
+                Write-Warning -Message " - Failed to downloaded update item content file for update type: $($UpdateItemType)"; exit
+            }
+            2 {
+                if ($ServiceStackUpdateExists -eq $true) {
+                    Write-Verbose -Message " - Unable to download Servicing Stack Update content, but existing content file already exists"
+                }
+                else {
+                    Write-Warning -Message " - Failed to downloaded update item content file for update type: $($UpdateItemType)"; exit
+                }
+            }
+        }
+    }
 
     if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
-        Write-Verbose -Message "[DynamicUpdateContent]: Initiating dynamic update content download phase"
-
         # Create Dynamic Update setup update folder
         $DUSUDownloadPath = Join-Path -Path $UpdateFilesRoot -ChildPath "DUSU"
         if (-not(Test-Path -Path $DUSUDownloadPath)) {
@@ -441,136 +598,51 @@ Process {
         else {
             Write-Verbose -Message " - Query for dynamic updates returned empty"
         }
-    
-        Write-Verbose -Message "[DynamicUpdateContent]: Successfully completed phase"
-    }
-
-    Write-Verbose -Message "[Content]: Initiating content requirements phase"
-
-    # Validate Source subfolder exist
-    if (-not(Test-Path -Path $OSMediaFilesPath)) {
-        Write-Warning -Message "Failed to locate required Source subfolder in: $($OSMediaFilesRoot)"; break
-    }
-
-    # Validate Source subfolder exist
-    if (-not(Test-Path -Path $UpdateFilesRoot)) {
-        Write-Warning -Message "Failed to locate required Updates subfolder in: $($OSMediaFilesRoot)"; break
     }    
 
-    # Create Mount subfolder
-    if (-not(Test-Path -Path $MountPathRoot)) {
-        New-Item -Path $OSMediaFilesRoot -Name "Mount" -ItemType Directory -Force | Out-Null
-        Write-Verbose -Message " - Successfully created the Mount subfolder in: $($OSMediaFilesRoot)"
-    }
-
-    # Create OS image mount path subfolder
-    $MountPathOSImage = Join-Path -Path $MountPathRoot -ChildPath "OSImage"
-    if (-not(Test-Path -Path $MountPathOSImage)) {
-        New-Item -Path $MountPathRoot -Name "OSImage" -ItemType Directory -Force | Out-Null
-        Write-Verbose -Message " - Successfully created the OS image mount subfolder"
-    }
-
-    # Create boot image mount path sub folder
-    $MountPathBootImage = Join-Path -Path $MountPathRoot -ChildPath "BootImage"
-    if (-not(Test-Path -Path $MountPathBootImage)) {
-        New-Item -Path $MountPathRoot -Name "BootImage" -ItemType Directory -Force | Out-Null
-        Write-Verbose -Message " - Successfully created the boot image mount subfolder"
-    }
-
-    # Create boot image mount path sub folder
-    $MountPathWinRE = Join-Path -Path $MountPathRoot -ChildPath "WinRE"
-    if (-not(Test-Path -Path $MountPathWinRE)) {
-        New-Item -Path $MountPathRoot -Name "WinRE" -ItemType Directory -Force | Out-Null
-        Write-Verbose -Message " - Successfully created the WinRE mount subfolder"
-    }
-
-    # Create temp mount path sub folder
-    $ImagePathTemp = Join-Path -Path $MountPathRoot -ChildPath "Temp"
-    if (-not(Test-Path -Path $ImagePathTemp)) {
-        New-Item -Path $MountPathRoot -Name "Temp" -ItemType Directory -Force | Out-Null
-        Write-Verbose -Message " - Successfully created the temp image subfolder"
-    }
-
-    # Validate specified OS media files path contains required install.wim file
-    $OSInstallWim = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim"
-    if (-not(Test-Path -Path $OSInstallWim)) {
-        Write-Warning -Message "Unable to locate install.wim file from specified OS media file location"; break
-    }
-
-    # Validate specified OS media files path contains required boot.wim file
-    $OSBootWim = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim"
-    if (-not(Test-Path -Path $OSBootWim)) {
-        Write-Warning -Message "Unable to locate boot.wim file from specified OS media file location"; break
-    }
-
-    # Validate updates root folder contains required CU subfolder
-    $UpdateCUFolderPath = Join-Path -Path $UpdateFilesRoot -ChildPath "CU"
-    if (Test-Path -Path $UpdateCUFolderPath) {
-        Write-Verbose -Message " - Located the required 'CU' folder"
-        if (-not((Get-ChildItem -Path $UpdateCUFolderPath -Recurse -Filter "*.msu").Count -ge 1)) {
-            Write-Warning -Message "Required 'CU' folder is empty, breaking operation"; break
-        }
-        else {
-            # Determine Cumulative Update file to be applied
-            $CumulativeUpdateFilePath = Get-ChildItem -Path $UpdateCUFolderPath -Recurse -Filter "*.msu" | Where-Object { $_.Length -ge 30720000 } | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
-            if ($CumulativeUpdateFilePath -eq $null) {
-                Write-Warning -Message "Failed to locate required Cumulative Update file in 'CU' folder, breaking operation"; break
-            }
-            else {
-                Write-Verbose -Message " - Selected the most recent Service Stack Update file: $($CumulativeUpdateFilePath)"
-            }
-        }
+    # Validate updates root folder contains required Cumulative Update content cabinet file
+    if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*CumulativeUpdate*.cab").Count -ge 1)) {
+        Write-Warning -Message "Unable to detect downloaded 'Cumulative Update' content cabinet file, breaking operation"; break
     }
     else {
-        Write-Warning -Message "Unable to locate required 'CU' subfolder in the update files root location. Please create it manually and add the latest Cumulative Update inside the folder"; break
-    }
-
-    # Validate updates root folder contains required SSU subfolder
-    $UpdateSSUFolderPath = Join-Path -Path $UpdateFilesRoot -ChildPath "SSU"
-    if (Test-Path -Path $UpdateSSUFolderPath) {
-        Write-Verbose -Message " - Located the required 'SSU' folder"
-        if (-not((Get-ChildItem -Path $UpdateSSUFolderPath -Recurse -Filter "*.msu").Count -ge 1)) {
-            Write-Warning -Message "Required 'SSU' folder is empty, setting variable to skip processing of other files"
-            $SkipServiceStackUpdatePatch = $true
+        # Determine Cumulative Update file to be applied
+        $CumulativeUpdateFilePath = Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*CumulativeUpdate*.cab" | Where-Object { $_.Length -ge 30720000 } | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
+        if ($CumulativeUpdateFilePath -eq $null) {
+            Write-Warning -Message "Failed to locate required Cumulative Update content cabinet file, breaking operation"; break
         }
         else {
-            # Determine Service Stack Update file to be applied
-            $ServiceStackUpdateFilePath = Get-ChildItem -Path $UpdateSSUFolderPath -Recurse -Filter "*.msu" | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
-            if ($ServiceStackUpdateFilePath -eq $null) {
-                Write-Warning -Message "Failed to locate a Service Stack Update file in 'SSU' folder"
-            }
-            else {
-                Write-Verbose -Message " - Selected the most recent Service Stack Update file: $($ServiceStackUpdateFilePath)"
-            }
+            Write-Verbose -Message " - Selected the most recent Cumulative Update content cabinet file: $($CumulativeUpdateFilePath)"
         }
-    }
-    else {
-        Write-Warning -Message "Unable to locate required 'SSU' subfolder in the update files root location. Please create it manually and add the latest Service Stack Update inside the folder"; break
     }
 
-    # Validate updates root folder contains required other subfolder
-    $UpdateOtherFolderPath = Join-Path -Path $UpdateFilesRoot -ChildPath "Other"
-    if (Test-Path -Path $UpdateOtherFolderPath) {
-        Write-Verbose -Message " - Located the required 'Other' folder"
-        if (-not((Get-ChildItem -Path $UpdateOtherFolderPath -Recurse -Filter "*.msu").Count -ge 1)) {
-            Write-Warning -Message "Required 'Other' folder is empty, setting variable to skip processing of other files"
-            $SkipOtherPatch = $true
-        }
-        else {
-            # Determine Service Stack Update file to be applied
-            $OtherUpdateFilePaths = Get-ChildItem -Path $UpdateOtherFolderPath -Recurse -Filter "*.msu" | Sort-Object -Descending -Property $_.CreationTime | Select-Object -ExpandProperty FullName
-            if ($OtherUpdateFilePaths -eq $null) {
-                Write-Warning -Message "Failed to locate any update files in 'Other' folder"
-            }
-            else {
-                foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
-                    Write-Verbose -Message " - Found the following update in the 'Other' folder: $($OtherUpdateFilePath)"
-                }
-            }
-        }
+    # Validate updates root folder contains required Servicing Stack Update content cabinet file
+    if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*ServicingStackUpdate*.cab").Count -ge 1)) {
+        Write-Warning -Message "Unable to detect downloaded 'Servicing Stack Update' content cabinet file, breaking operation"; break
     }
     else {
-        Write-Warning -Message "Unable to locate required 'Other' subfolder in the update files root location. Please create it manually and add the latest Adobe Flash update inside the folder"; break
+        # Determine Servicing Stack Update file to be applied
+        $ServiceStackUpdateFilePath = Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*ServicingStackUpdate*.cab" | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
+        if ($ServiceStackUpdateFilePath -eq $null) {
+            Write-Warning -Message "Failed to locate required Servicing Stack Update content cabinet file, breaking operation"; break
+        }
+        else {
+            Write-Verbose -Message " - Selected the most recent Servicing Stack Update content cabinet file: $($ServiceStackUpdateFilePath)"
+        }
+    }
+
+    # Validate updates root folder contains required Adobe Flash Player content cabinet file
+    if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*AdobeFlashPlayer*.cab").Count -ge 1)) {
+        Write-Warning -Message "Unable to detect downloaded 'Adobe Flash Player' content cabinet file, breaking operation"; break
+    }
+    else {
+        # Determine Adobe Flash Player file to be applied
+        $OtherUpdateFilePaths = Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*AdobeFlashPlayer*.cab" | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
+        if ($OtherUpdateFilePaths -eq $null) {
+            Write-Warning -Message "Failed to locate required Adobe Flash Player content cabinet file, breaking operation"; break
+        }
+        else {
+            Write-Verbose -Message " - Selected the most recent Adobe Flash Player content cabinet file: $($OtherUpdateFilePaths)"
+        }
     }
 
     if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
@@ -689,16 +761,10 @@ Process {
                 Mount-WindowsImage -ImagePath $OSImageTempWim -Index 1 -Path $MountPathOSImage -ErrorAction Stop | Out-Null
     
                 try {
-                    if ($SkipServiceStackUpdatePatch -ne $true) {
-                        # Attempt to apply required updates for OS image: Service Stack Update
-                        Write-Verbose -Message " - Attempting to apply required patch in OS image for: Service Stack Update"
-                        Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
-                        $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
-                    }
-                    else {
-                        Write-Verbose -Message " - Skipping Service Stack Update due to missing update file in sub-folder"
-                        $ReturnValue = 0
-                    }
+                    # Attempt to apply required updates for OS image: Service Stack Update
+                    Write-Verbose -Message " - Attempting to apply required patch in OS image for: Service Stack Update"
+                    Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
+                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
     
                     if ($ReturnValue -eq 0) {
                         # Attempt to apply required updates for OS image: Cumulative Update
@@ -707,19 +773,14 @@ Process {
                         $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
     
                         if ($ReturnValue -eq 0) {
-                            if ($SkipOtherPatch -ne $true) {
-                                # Attempt to apply required updates for OS image: Other
-                                Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
-                                foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
-                                    Write-Verbose -Message " - Currently processing: $($OtherUpdateFilePath)"
-                                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($OtherUpdateFilePath)"""
-                                    if ($ReturnValue -ne 0) {
-                                        Write-Warning -Message "Failed to apply required patch in OS image for: $($OtherUpdateFilePath)"
-                                    }
-                                }                                
-                            }
-                            else {
-                                Write-Verbose -Message " - Skipping Other updates due to missing update files in sub-folder"
+                            # Attempt to apply required updates for OS image: Other
+                            Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
+                            foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
+                                Write-Verbose -Message " - Currently processing: $($OtherUpdateFilePath)"
+                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($OtherUpdateFilePath)"""
+                                if ($ReturnValue -ne 0) {
+                                    Write-Warning -Message "Failed to apply required patch in OS image for: $($OtherUpdateFilePath)"
+                                }
                             }
 
                             if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
@@ -744,7 +805,7 @@ Process {
     
                             if ($ReturnValue -eq 0) {
                                 # Cleanup OS image before applying .NET Framework 3.5
-                                Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of OS image"
+                                Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of OS image, this operation could take some time"
                                 $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Cleanup-Image /StartComponentCleanup /ResetBase"
     
                                 if ($ReturnValue -eq 0) {
@@ -836,16 +897,10 @@ Process {
                                             Write-Verbose -Message " - Attempting to mount temporary winre_temp.wim file from: $($OSImageWinRETemp)"
                                             Mount-WindowsImage -ImagePath $OSImageWinRETemp -Path $MountPathWinRE -Index 1 -ErrorAction Stop | Out-Null
                                             
-                                            if ($SkipServiceStackUpdatePatch -ne $true) {
-                                                # Attempt to apply required updates for WinRE image: Service Stack Update
-                                                Write-Verbose -Message " - Attempting to apply required patch in temporary WinRE image for: Service Stack Update"
-                                                Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
-                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
-                                            }
-                                            else {
-                                                Write-Verbose -Message " - Skipping Service Stack Update due to missing update file in sub-folder"
-                                                $ReturnValue = 0
-                                            }
+                                            # Attempt to apply required updates for WinRE image: Service Stack Update
+                                            Write-Verbose -Message " - Attempting to apply required patch in temporary WinRE image for: Service Stack Update"
+                                            Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
+                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
                                             
                                             if ($ReturnValue -eq 0) {
                                                 # Attempt to apply required updates for WinRE image: Cumulative Update
@@ -855,7 +910,7 @@ Process {
                                                 
                                                 if ($ReturnValue -eq 0) {
                                                     # Cleanup WinRE image
-                                                    Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of temporary WinRE image"
+                                                    Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of temporary WinRE image, this operation could take some time"
                                                     $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Cleanup-Image /StartComponentCleanup /ResetBase"
     
                                                     if ($ReturnValue -eq 0) {
@@ -913,15 +968,10 @@ Process {
                                                                                             Write-Verbose -Message " - Attempting to mount temporary boot image file"
                                                                                             Mount-WindowsImage -ImagePath $OSBootWimTemp -Index 2 -Path $MountPathBootImage -ErrorAction Stop | Out-Null
 
-                                                                                            if ($SkipServiceStackUpdatePatch -ne $true) {
-                                                                                                # Attempt to apply required updates for boot image: Service Stack Update
-                                                                                                Write-Verbose -Message " - Attempting to apply required patch in temporary boot image for: Service Stack Update"
-                                                                                                Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
-                                                                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathBootImage)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
-                                                                                            }
-                                                                                            else {
-                                                                                                $ReturnValue = 0
-                                                                                            }
+                                                                                            # Attempt to apply required updates for boot image: Service Stack Update
+                                                                                            Write-Verbose -Message " - Attempting to apply required patch in temporary boot image for: Service Stack Update"
+                                                                                            Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
+                                                                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathBootImage)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
 
                                                                                             if ($ReturnValue -eq 0) {
                                                                                                 # Attempt to apply required updates for boot image: Cumulative Update
@@ -949,22 +999,23 @@ Process {
                                                                                                                 Move-Item -Path $OSBootWimTemp -Destination (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Force -ErrorAction Stop
 
                                                                                                                 Write-Verbose -Message "[BootImageExport]: Successfully completed phase"
-                                                                                                                Write-Verbose -Message "[OSImageFinal]: Initiating OS image final servicing phase"
 
-                                                                                                                try {
-                                                                                                                    Write-Verbose -Message " - Attempting to copy Dynamic Updates setup update files into OS media source file location"
-                                                                                                                    $OSMediaSourcesPath = Join-Path -Path $OSMediaFilesPath -ChildPath "sources"
-                                                                                                                    $UpdateDUSUExtractedFolders = Get-ChildItem -Path $DUSUExtractPath -Directory -ErrorAction Stop
-                                                                                                                    foreach ($UpdateDUSUExtractedFolder in $UpdateDUSUExtractedFolders) {
-                                                                                                                        Write-Verbose -Message " - Currently processing folder: $($UpdateDUSUExtractedFolder.FullName)"
-                                                                                                                        Copy-Item -Path "$($UpdateDUSUExtractedFolder.FullName)\*" -Destination $OSMediaSourcesPath -Container -Force -Recurse -ErrorAction Stop
+                                                                                                                if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
+                                                                                                                    try {
+                                                                                                                        Write-Verbose -Message "[OSImageFinal]: Initiating OS image final servicing phase"
+                                                                                                                        Write-Verbose -Message " - Attempting to copy Dynamic Updates setup update files into OS media source file location"
+                                                                                                                        $OSMediaSourcesPath = Join-Path -Path $OSMediaFilesPath -ChildPath "sources"
+                                                                                                                        $UpdateDUSUExtractedFolders = Get-ChildItem -Path $DUSUExtractPath -Directory -ErrorAction Stop
+                                                                                                                        foreach ($UpdateDUSUExtractedFolder in $UpdateDUSUExtractedFolders) {
+                                                                                                                            Write-Verbose -Message " - Currently processing folder: $($UpdateDUSUExtractedFolder.FullName)"
+                                                                                                                            Copy-Item -Path "$($UpdateDUSUExtractedFolder.FullName)\*" -Destination $OSMediaSourcesPath -Container -Force -Recurse -ErrorAction Stop
+                                                                                                                        }
+                                                                                                                        Write-Verbose -Message "[OSImageFinal]: Successfully completed phase"
+                                                                                                                    }
+                                                                                                                    catch [System.Exception] {
+                                                                                                                        Write-Warning -Message "Failed to copy Dynamic Updates setup update files into OS media source files. Error message: $($_.Exception.Message)"
                                                                                                                     }
                                                                                                                 }
-                                                                                                                catch [System.Exception] {
-                                                                                                                    Write-Warning -Message "Failed to copy Dynamic Updates setup update files into OS media source files. Error message: $($_.Exception.Message)"
-                                                                                                                }
-
-                                                                                                                Write-Verbose -Message "[OSImageFinal]: Successfully completed phase"
 
                                                                                                                 # Set Windows image servicing completed variable
                                                                                                                 $WindowsImageServicingCompleted = $true
@@ -1080,6 +1131,9 @@ Process {
 End {
     if ($WindowsImageServicingCompleted -eq $true) {
         Write-Verbose -Message "[Servicing]: Windows image servicing completed successfully"
+    }
+    else {
+        Write-Warning -Message "[Servicing]: Windows image servicing failed, please refer to warning messages in the output stream"
     }
 
     Write-Verbose -Message "[Cleanup]: Initiaing servicing cleanup process"
