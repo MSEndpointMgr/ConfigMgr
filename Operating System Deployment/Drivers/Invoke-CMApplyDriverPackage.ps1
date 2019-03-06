@@ -106,6 +106,7 @@
 	2.1.6 - (2019-01-28) Fixed an issue with the recurse injection of drivers for a single detected driver package that was using an unassigned variable
 	2.1.7 - (2019-02-13) Added support for Windows 10 version 1809 in the Get-OSDetails function
 	2.1.8 - (2019-02-13) Added trimming of manufacturer and models data gathering from WMI
+	2.1.9 - (2019-03-06) Added support for non-terminating error when no matching driver packages where detected for OSUpgrade and DriverUpdate deployment types
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -155,7 +156,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.8"
+	$ScriptVersion = "2.1.9"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -915,9 +916,7 @@ Process {
 									# Determine matching driver package from array list with vendor specific solutions
 									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
 										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSVersion)" -Severity 1
-										$Package = ($PackageList | Where-Object {
-												$_.PackageName -match $OSVersion
-											}) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+										$Package = ($PackageList | Where-Object { $_.PackageName -match $OSVersion }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 									}
 									else {
 										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
@@ -1006,7 +1005,15 @@ Process {
 										}
 									}
 									else {
-										Write-CMLogEntry -Value "An error occurred while selecting manufacturer specific driver packages from list, empty list of packages detected" -Severity 3; exit 21
+										Write-CMLogEntry -Value "An error occurred while selecting manufacturer specific driver packages from list, empty list of packages detected" -Severity 3
+										switch ($DeploymentType) {
+											"BareMetal" {
+												exit 21
+											}
+											default {
+												exit 0
+											}
+										}
 									}
 								}
 								catch [System.Exception] {
@@ -1014,7 +1021,15 @@ Process {
 								}
 							}
 							else {
-								Write-CMLogEntry -Value "Unable to determine a matching driver package from package list array, unhandled amount of matches" -Severity 2; exit 7
+								Write-CMLogEntry -Value "Unable to determine a matching driver package from package list array, unhandled amount of matches" -Severity 2
+								switch ($DeploymentType) {
+									"BareMetal" {
+										exit 7
+									}
+									default {
+										exit 0
+									}
+								}
 							}
 						}
 						else {
