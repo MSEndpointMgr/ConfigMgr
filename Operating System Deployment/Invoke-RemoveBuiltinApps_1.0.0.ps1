@@ -20,7 +20,8 @@
     Updated:     2019-03-10
 
     Version history:
-    1.0.0 - (2019-03-10) Initial script updated with help section and a fix for randomly freezing
+    1.0.0 - (2019-03-10) Initial script updated with help section
+    1.0.1 - (2019-03-11) Added code to disable/enable the AppReadiness service
 #>
 Begin {
     # White list of Features On Demand V2 packages
@@ -135,6 +136,12 @@ Process {
         Stop-Service -Name "InstallService" -Force -ErrorAction Stop
         Write-LogEntry -Value "Attempting to set the InstallService startup behavior to Disabled"
         Set-Service -Name "InstallService" -StartupType "Disabled" -ErrorAction Stop
+
+        # Disable the AppReadiness service
+        Write-LogEntry -Value "Attempting to stop the AppReadiness service for automatic store updates"
+        Stop-Service -Name "AppReadiness" -Force -ErrorAction Stop
+        Write-LogEntry -Value "Attempting to set the AppReadiness startup behavior to Disabled"
+        Set-Service -Name "AppReadiness" -StartupType "Disabled" -ErrorAction Stop        
     }
     catch [System.Exception] {
         Write-LogEntry -Value "Failed to disable automatic store updates: $($_.Exception.Message)"
@@ -193,6 +200,8 @@ Process {
         Remove-ItemProperty -Path $RegistryCloudContent -Name "DisableWindowsConsumerFeatures" -Force -ErrorAction Stop
         Write-LogEntry -Value "Attempting to set the InstallService startup behavior to Manual"
         Set-Service -Name "InstallService" -StartupType "Manual" -ErrorAction Stop
+        Write-LogEntry -Value "Attempting to set the AppReadiness startup behavior to Manual"
+        Set-Service -Name "AppReadiness" -StartupType "Manual" -ErrorAction Stop
     }
     catch [System.Exception] {
         Write-LogEntry -Value "Failed to enable automatic store updates: $($_.Exception.Message)"
