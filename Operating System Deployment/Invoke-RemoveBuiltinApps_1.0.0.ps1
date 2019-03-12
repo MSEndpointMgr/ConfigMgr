@@ -22,6 +22,7 @@
     Version history:
     1.0.0 - (2019-03-10) Initial script updated with help section
     1.0.1 - (2019-03-11) Added code to disable/enable the AppReadiness service
+    1.0.2 - (2019-03-12) Added code to wait for 3 seconds before attempting to remove appx provisioning package
 #>
 Begin {
     # White list of Features On Demand V2 packages
@@ -159,11 +160,8 @@ Process {
             Write-LogEntry -Value "Skipping excluded application package: $($App)"
         }
         else {
-            # Gather package names
-            $AppPackageFullName = Get-AppxPackage -Name $App | Select-Object -ExpandProperty PackageFullName -First 1
-            $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $App } | Select-Object -ExpandProperty PackageName -First 1
-
             # Attempt to remove AppxPackage
+            $AppPackageFullName = Get-AppxPackage -Name $App | Select-Object -ExpandProperty PackageFullName -First 1
             if ($AppPackageFullName -ne $null) {
                 try {
                     Write-LogEntry -Value "Removing AppxPackage: $($AppPackageFullName)"
@@ -178,6 +176,8 @@ Process {
             }
 
             # Attempt to remove AppxProvisioningPackage
+            Start-Sleep -Seconds 3
+            $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $App } | Select-Object -ExpandProperty PackageName -First 1
             if ($AppProvisioningPackageName -ne $null) {
                 try {
 
