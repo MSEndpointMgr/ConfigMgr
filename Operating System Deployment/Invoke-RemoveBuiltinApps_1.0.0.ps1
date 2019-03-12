@@ -180,6 +180,12 @@ Process {
             # Attempt to remove AppxProvisioningPackage
             if ($AppProvisioningPackageName -ne $null) {
                 try {
+
+                    #
+                    # Idea 1: Check if InstallService service is running at this time, wait for it to complete
+                    # Idea 2: Test with: dism.exe /Online /Remove-ProvisionedAppxPackage /PackageName:microsoft.devx.appx.app1_1.0.0.0_neutral_ac4zc6fex2zjp
+                    #
+
                     Write-LogEntry -Value "Removing AppxProvisioningPackage: $($AppProvisioningPackageName)"
                     Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
                 }
