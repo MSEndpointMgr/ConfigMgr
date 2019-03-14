@@ -203,7 +203,12 @@ Process {
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
 		
 		# Construct time stamp for log entry
-		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
+		If (-not(Test-Path -Path 'variable:global:TimezoneBias')) {
+			[string]$global:TimezoneBias = [System.TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).TotalMinutes
+			If ($TimezoneBias -match "^-") {$TimezoneBias = $TimezoneBias.Replace('-', '+')# flip the offset value from negative to positive
+			} else {$TimezoneBias = '-' + $TimezoneBias }
+		}
+		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias) #"+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
 		
 		# Construct date for log entry
 		$Date = (Get-Date -Format "MM-dd-yyyy")
