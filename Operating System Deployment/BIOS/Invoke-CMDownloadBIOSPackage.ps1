@@ -55,6 +55,7 @@
 	2.0.6 - (2018-05-29) Added logic to all for the fallback to model name matching for BIOS update packages
 						 Additional logging output
 	2.0.7 - (2018-11-27) Added logic for HP BIOS version differences in new models
+	2.0.8 - (2019-03-14) Fix bug and grammar when execute in windows 7 which with powershell 2.0
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -189,7 +190,7 @@ Process {
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
+			[Validatescript({$_ -match '^[A-Z0-9]{3}[A-F0-9]{5}$'})]
 			[string]$PackageID,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
@@ -434,7 +435,7 @@ Process {
 	# Validate not virtual machine
 	$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
 	
-	if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
+	if (@("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM") -notcontains $ComputerSystemType) {
 		# Process packages returned from web service
 		if ($Packages -ne $null) {
 			if (($ComputerModel -ne $null) -and (-not ([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not ([System.String]::IsNullOrEmpty($SystemSKU))))) {
