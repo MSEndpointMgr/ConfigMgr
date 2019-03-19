@@ -24,21 +24,24 @@
 	1.0.1 - (2018-09-07) Changed parameters to switches
 	1.0.2 - (2018-09-12) Renamed battery check to power check and updated the logic around detecting if machine has the AC power connected
 	1.0.3 - (2018-11-26) Updated the DiskFreeSpace check to create a TS variable named 'OSDCleanDisk' if free disk space is below the specified amount of GB
-
+	1.0.4 - (2019-03-19) Added VPN check to see if an established VPN connection exist
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
-	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run AC power check")]
+	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run AC power check.")]
 	[switch]$PowerCheck,
 	
-	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run network checks")]
+	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run network check.")]
 	[switch]$NetworkCheck,
 	
-	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run client cache size checks")]
+	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run client cache size check.")]
 	[switch]$CacheCheck,
 	
-	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run disk space checks")]
-	[switch]$DiskSpaceCheck
+	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run disk space check.")]
+	[switch]$DiskSpaceCheck,
+
+	[parameter(Mandatory = $false, HelpMessage = "Specify if you want to run established VPN connection check.")]
+	[switch]$VPNCheck
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -91,11 +94,11 @@ Process {
 		}
 	}
 	
-	Write-CMLogEntry -Value "===== Running in-place upgrade pre-flight checks =====" -Severity 1
+	Write-CMLogEntry -Value "===== Running selected In-Place Upgrade pre-flight checks =====" -Severity 1
 	
 	if ($PSBoundParameters["PowerCheck"]) {
 		try {
-			$LogDescription = "AC Power Pre-Flight Check:"
+			$LogDescription = "AC Power check:"
 			Write-CMLogEntry -Value "$($LogDescription) Validating AC power status" -Severity 1
 			$BatteryStatus = Get-WmiObject -Class Win32_Battery | Select-Object BatteryStatus
 
@@ -127,7 +130,7 @@ Process {
 	if ($PSBoundParameters["NetworkCheck"]) {
 		try {
 			# List all locally available IPv4 connections
-			$LogDescription = "Network Pre-Flight Check:"
+			$LogDescription = "Network check:"
 			$NetworkConnections = Get-NetConnectionProfile
 			
 			# Check Network Connection Type
@@ -169,7 +172,7 @@ Process {
 	if ($PSBoundParameters["CacheCheck"]) {
 		try {
 			# Check Cache Size
-			$LogDescription = "Cache Size Pre-Flight Check:"
+			$LogDescription = "ConfigMgr Client cache size check:"
 			[int]$MinCacheSize = 10
 			[int]$CacheSize = [Math]::Round((Get-WmiObject -Namespace ROOT\CCM\SoftMgmtAgent -Query "Select Size from CacheConfig" | Select-Object -ExpandProperty "Size") / 1024)
 			Write-CMLogEntry -Value "$($LogDescription) Client cache size determined as $($CacheSize) GB" -Severity 1
@@ -192,7 +195,7 @@ Process {
 	if ($PSBoundParameters["DiskSpaceCheck"]) {
 		try {
 			# Check Hard Disk Space
-			$LogDescription = "Hard Disk Pre-Flight Check:"
+			$LogDescription = "Hard Disk check:"
 			Write-CMLogEntry -Value "$($LogDescription) Checking free disk space reserve on drive C:" -Severity 1
 
 			$OSDriveInfo = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
@@ -215,4 +218,77 @@ Process {
 			Write-Warning -Message "$($LogDescription) An error occurred while checking free disk space. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; break
 		}
 	}
+
+	if ($PSBoundParameters["VPNCheck"]) {
+		try {
+			# Check Hard Disk Space
+			$LogDescription = "Established VPN connection check:"
+			Write-CMLogEntry -Value "$($LogDescription) Checking for an established VPN connection" -Severity 1
+
+			# Control variable for outcome of check
+			$VPNConnectionEstablished = $false
+
+			# Validate that Direct Access is configured
+			$DirectAccess = Get-ChildItem -Path "HKLM:\Software\Policies\Microsoft\Windows NT\DNSClient\DnsPolicyConfig" -ErrorAction SilentlyContinue
+			if ($DirectAccess -ne $null) {
+				# Validate that Direct Access is not connected
+				if ((Get-DAConnectionStatus | Select-Object -Property Status).Status -notlike "ConnectedRemotely") {
+					# Continue, Direct Access is not successfully connected
+					Write-CMLogEntry -Value "$($LogDescription) Direct Access was not detected as connected" -Severity 1
+				}
+				else {
+					# Do not continue, Direct Access is connected
+					Write-CMLogEntry -Value "$($LogDescription) Direct Access was detected as connected" -Severity 2
+					$VPNConnectionEstablished = $true
+				}
+			}
+
+			# Validate that VPN connection is not in use
+			$KnownDescriptionPattern = @('^WAN Miniport \(PPPOE\)', '^WAN Miniport \(IPv6\)', '^WAN Miniport \(Network Monitor\)', '^WAN Miniport \(IP\)', '^Surface Ethernet Adapter', '^Microsoft 6to4 Adapter', '^Hyper-V Virtual', '^Microsoft Wi-Fi Direct Virtual Adapter', '^Microsoft Virtual WiFi Miniport Adapter', '^Microsoft WiFi Direct Virtual Adapter', '^Microsoft ISATAP Adapter', '^Direct Parallel', '^Microsoft Kernel Debug Network Adapter', '^Microsoft Teredo', '^Packet Scheduler Miniport', '^VMware Virtual', '^vmxnet', 'VirtualBox', '^Bluetooth Device', '^RAS Async Adapter', 'USB')  -join "|" 
+			$NetworkAdapterList = New-Object -TypeName System.Collections.ArrayList
+			$NetworkAdapterConfigurations = Get-WmiObject -Class "Win32_NetworkAdapterConfiguration" -ErrorAction Stop
+			foreach ($NetworkAdapterConfiguration in $NetworkAdapterConfigurations) {
+				if ($NetworkAdapterConfiguration.Description -notmatch $KnownDescriptionPattern) {
+					$NetworkAdapterList.Add(($NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true } | Select-Object -Property @{ L = "DeviceID"; E = { $_.Index } }, DNSDomain, DefaultIPGateway, DHCPServer, IPEnabled, PhysicalAdapter, Manufacturer, Description)) | Out-Null
+				}
+			}
+			$VPNConnection = $NetworkAdapterList | Where-Object { $_.Description -match "Fortinet|Cisco AnyConnect|Juniper|Check Point|SonicWall|F5 Access|Palo Alto|Pulse Secure|Zscaler" }
+			if ($VPNConnection -ne $null) {
+				Write-CMLogEntry -Value "$($LogDescription) VPN connection detected on adapter '$($VPNConnection.Description)'" -Severity 2
+				$VPNConnectionEstablished = $true
+			}
+			else {
+				Write-CMLogEntry -Value "$($LogDescription) VPN connection was not detected" -Severity 1
+			}
+
+			# Validate that built-in VPN connection is not connected
+			$VPNConnections = Get-VpnConnection
+			if ($VPNConnections -ne $null) {
+				foreach ($VPNConnection in $VPNConnections) {
+					if ($VPNConnection.ConnectionStatus -notlike "Disconnected") {
+						Write-CMLogEntry -Value "$($LogDescription) Built-in VPN connection '$($VPNConnection.Name)' is connected" -Severity 2
+						$VPNConnectionEstablished = $true
+					}
+					else {
+						Write-CMLogEntry -Value "$($LogDescription) Built-in VPN connection '$($VPNConnection.Name)' is disconnected" -Severity 1
+					}
+				}				
+			}
+			else {
+				Write-CMLogEntry -Value "$($LogDescription) No built-in VPN connections detected" -Severity 1
+			}
+
+			if ($VPNConnectionEstablished -eq $false) {
+				$TSEnvironment.Value("OSDPLVPNPass") = $true
+			}
+			else {
+				$TSEnvironment.Value("OSDPLVPNPass") = $false
+			}
+
+			Write-CMLogEntry -Value "$($LogDescription) OSDPLVPNPass variable has value: $($TSEnvironment.Value("OSDPLVPNPass"))" -Severity 1
+		}
+		catch [System.Exception] {
+			Write-Warning -Message "$($LogDescription) An error occurred while checking for an established VPN connection. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"; break
+		}
+	}	
 }
