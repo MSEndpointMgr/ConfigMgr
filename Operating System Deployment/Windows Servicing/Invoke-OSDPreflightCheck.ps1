@@ -17,7 +17,7 @@
     Author:      Maurice Daly / Nickolaj Andersen
     Contact:     @MoDaly_IT / @NickolajA
     Created:     2018-09-07
-    Updated:     2018-09-12
+    Updated:     2019-03-19
 
     Version history:
 	1.0.0 - (2018-09-07) Script created
