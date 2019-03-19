@@ -25,6 +25,7 @@
 	1.0.3 - (2018-04-30) Example conditional variable example updated. No functional changes
 	1.0.4 - (2018-05-07) Updated to copy in required OLEDLG.dll where missing in the BIOS package
 	1.0.5 - (2018-05-08) Updated to cater for varying OS source directory paths
+	1.0.6 - (2018-12-10) Updated to support 64-bit version of Flash64.cmd
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -120,11 +121,18 @@ Process {
 		} | Select-Object -ExpandProperty FullName
 	}
 	
-	# Flash CMD upgrade utility file name
-	$FlashCMDUtility = Get-ChildItem -Path $Path -Filter "*.cmd" -Recurse | Where-Object {
-		$_.Name -like "Flash.cmd"
-	} | Select-Object -ExpandProperty FullName
-	
+    # Flash CMD upgrade utility file name
+    if (([Environment]::Is64BitOperatingSystem) -eq $true) {
+        $FlashCMDUtility = Get-ChildItem -Path $Path -Filter "*.cmd" -Recurse | Where-Object {
+            $_.Name -like "Flash64.cmd"
+        } | Select-Object -ExpandProperty FullName
+    }
+    else {
+        $FlashCMDUtility = Get-ChildItem -Path $Path -Filter "*.cmd" -Recurse | Where-Object {
+            $_.Name -like "Flash.cmd"
+        } | Select-Object -ExpandProperty FullName
+    }
+
 	if ($WinUPTPUtility -ne $null) {
 		# Set required switches for silent upgrade of the bios and logging
 		Write-CMLogEntry -Value "Using WinUTPT BIOS update method" -Severity 1
