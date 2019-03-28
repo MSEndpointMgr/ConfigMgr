@@ -1,7 +1,6 @@
 <#
 .SYNOPSIS
 	Download driver package (regular package) matching computer model, manufacturer and operating system.
-	
 .DESCRIPTION
     This script will determine the model of the computer, manufacturer and operating system being deployed and then query 
     the specified endpoint for ConfigMgr WebService for a list of Packages. It then sets the OSDDownloadDownloadPackages variable 
@@ -56,7 +55,7 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2019-02-13
+    Updated:     2019-03-28
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
     
@@ -107,6 +106,7 @@
 	2.1.7 - (2019-02-13) Added support for Windows 10 version 1809 in the Get-OSDetails function
 	2.1.8 - (2019-02-13) Added trimming of manufacturer and models data gathering from WMI
 	2.1.9 - (2019-03-06) Added support for non-terminating error when no matching driver packages where detected for OSUpgrade and DriverUpdate deployment types
+    2.2.0 - (2019-03-28) PreCache option for DeploymentType @CodyMathis123
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -114,49 +114,40 @@ param (
 	[parameter(Mandatory = $true, ParameterSetName = "Debug")]
 	[ValidateNotNullOrEmpty()]
 	[string]$URI,
-	
 	[parameter(Mandatory = $true, ParameterSetName = "Execute", HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
 	[parameter(Mandatory = $true, ParameterSetName = "Debug")]
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
-	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
-	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate")]
+	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate", "PreCache")]
 	[string]$DeploymentType = "BareMetal",
-	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Filter = "Driver",
-	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify if the script is to be used with a driver fallback package.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[switch]$UseDriverFallback,
-	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify whether to install drivers using DISM.exe with recurse option or spawn a new process for each driver.")]
 	[ValidateNotNullOrEmpty()]
 	[ValidateSet("Single", "Recurse")]
 	[string]$DriverInstallMode = "Recurse",
-	
 	[parameter(Mandatory = $true, ParameterSetName = "Debug", HelpMessage = "Use this switch when running script outside of a Task Sequence.")]
 	[switch]$DebugMode,
-	
 	[parameter(Mandatory = $true, ParameterSetName = "Debug", HelpMessage = "Specify the Task Sequence PackageID when running in debug mode.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$TSPackageID,
-	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$OSImageTSVariableName,
-
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a task sequence package ID for a child task sequence. Should only be used when the Apply Operating System step is in a child task sequence.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$OverrideTSPackageID
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.9"
+	$ScriptVersion = "2.2.0"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -203,10 +194,14 @@ Process {
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
 		
 		# Construct time stamp for log entry
-		If (-not(Test-Path -Path 'variable:global:TimezoneBias')) {
+		If (-not (Test-Path -Path 'variable:global:TimezoneBias')) {
 			[string]$global:TimezoneBias = [System.TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).TotalMinutes
-			If ($TimezoneBias -match "^-") {$TimezoneBias = $TimezoneBias.Replace('-', '+')# flip the offset value from negative to positive
-			} else {$TimezoneBias = '-' + $TimezoneBias }
+			If ($TimezoneBias -match "^-") {
+				$TimezoneBias = $TimezoneBias.Replace('-', '+') # flip the offset value from negative to positive
+			}
+			else {
+				$TimezoneBias = '-' + $TimezoneBias
+			}
 		}
 		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias) #"+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
 		
@@ -228,7 +223,7 @@ Process {
 		}
 	}
 	
-
+	
 	function Invoke-Executable {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
@@ -241,10 +236,10 @@ Process {
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath	 = $FilePath
-			NoNewWindow  = $true
-			Passthru	 = $true
-			ErrorAction  = "Stop"
+			FilePath    = $FilePath
+			NoNewWindow = $true
+			Passthru    = $true
+			ErrorAction = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -379,10 +374,10 @@ Process {
 							if ($OSImage.PackageID -like $OSImageTSVariableValue) {
 								# Create custom object for return value
 								$PSObject = [PSCustomObject]@{
-									OSVersion  = $OSImage.Version
+									OSVersion = $OSImage.Version
 									OSArchitecture = $OSImage.Architecture
 								}
-
+								
 								# Handle return value
 								return $PSObject
 							}
@@ -395,10 +390,10 @@ Process {
 						
 						# Create custom object for return value
 						$PSObject = [PSCustomObject]@{
-							OSVersion  = $OSImage.Version
+							OSVersion = $OSImage.Version
 							OSArchitecture = $OSImage.Architecture
 						}
-
+						
 						# Handle return value
 						return $PSObject
 					}
@@ -406,10 +401,10 @@ Process {
 				else {
 					# Create custom object for return value
 					$PSObject = [PSCustomObject]@{
-						OSVersion  = $OSImages.Version
+						OSVersion = $OSImages.Version
 						OSArchitecture = $OSImages.Architecture
 					}
-
+					
 					# Handle return value
 					return $PSObject
 				}
@@ -491,14 +486,14 @@ Process {
 		if ($OSName -match "Windows 10") {
 			Write-CMLogEntry -Value "Translated OSVersion from OSImageVersion: $($OSVersion)" -Severity 1
 			$PSObject = [PSCustomObject]@{
-				OSName = $OSName
+				OSName    = $OSName
 				OSVersion = $OSVersion
 			}
 			return $PSObject
 		}
 		else {
 			$PSObject = [PSCustomObject]@{
-				OSName  = $OSName
+				OSName    = $OSName
 				OSVersion = $null
 			}
 			return $PSObject
@@ -561,11 +556,11 @@ Process {
 	# Fall back SystemSKU details	
 	switch ($ComputerManufacturer) {
 		"Dell" {
-			[string]$OEMString = Get-WmiObject -Class Win32_ComputerSystem | Select -ExpandProperty OEMStringArray
+			[string]$OEMString = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty OEMStringArray
 			$FallBackSKU = [regex]::Matches($OEMString, '\[\S*]')[0].Value.TrimStart("[").TrimEnd("]")
 		}
 	}
-
+	
 	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
 	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
 	if (-not ([string]::IsNullOrEmpty($SystemSKU))) {
@@ -648,6 +643,22 @@ Process {
 			# Translate operating system architecture from running operating system
 			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
 		}
+		"PreCache" {
+			# Get OS Image data
+			$OSImageData = Get-OSImageData
+			
+			# Get OS data
+			$OSImageVersion = $OSImageData.OSVersion
+			$OSArchitecture = $OSImageData.OSArchitecture
+			
+			# Translate operating system name from version
+			$OSDetails = Get-OSDetails -InputObject $OSImageVersion
+			$OSName = $OSDetails.OSName
+			$OSVersion = $OSDetails.OSVersion
+			
+			# Translate operating system architecture from web service response
+			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
+		}
 	}
 	
 	# Validate operating system name was detected
@@ -656,7 +667,7 @@ Process {
 		$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
 		if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
 			if ($Packages -ne $null) {
-				if (($ComputerModel -ne $null) -and (-not([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not([System.String]::IsNullOrEmpty($SystemSKU))))) {
+				if (($ComputerModel -ne $null) -and (-not ([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not ([System.String]::IsNullOrEmpty($SystemSKU))))) {
 					# Determine computer model detection
 					if ([System.String]::IsNullOrEmpty($SystemSKU)) {
 						$ComputerDetectionMethod = "ComputerModel"
@@ -687,7 +698,7 @@ Process {
 									$PackageNameComputerModel = $Package.PackageName.Replace($ComputerManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
 								}
 							}
-
+							
 							switch ($ComputerDetectionMethod) {
 								"ComputerModel" {
 									if ($PackageNameComputerModel -match $ComputerModel) {
@@ -720,7 +731,7 @@ Process {
 												$SKUMatchDetectionResult = $true
 											}
 											else {
-												$SKUMatchDetectionResult = $false	
+												$SKUMatchDetectionResult = $false
 											}
 										}
 										if ($SKUMatchDetectionResult -eq $true) {
@@ -801,7 +812,14 @@ Process {
 								try {
 									# Attempt to download driver package content
 									Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content - $($PackageList[0].PackageID)" -Severity 1
-									$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+									switch ($DeploymentType) {
+										"PreCache" {
+											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage" -IsNotCustom
+										}
+										Default {
+											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+										}
+									}
 									
 									try {
 										if ($DownloadInvocation -eq 0) {
@@ -871,6 +889,10 @@ Process {
 													$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
 													Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
 												}
+												"PreCache" {
+													# Note that drivers have been downloaded succesfully - our work here is done!
+													Write-CMLogEntry -Value "Driver package content downloaded successfully to: $($OSDDriverPackageLocation)" -Severity 1
+												}
 											}
 										}
 										else {
@@ -921,7 +943,9 @@ Process {
 									# Determine matching driver package from array list with vendor specific solutions
 									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
 										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSVersion)" -Severity 1
-										$Package = ($PackageList | Where-Object { $_.PackageName -match $OSVersion }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+										$Package = ($PackageList | Where-Object {
+												$_.PackageName -match $OSVersion
+											}) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 									}
 									else {
 										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
@@ -931,7 +955,14 @@ Process {
 									if ($Package -ne $null) {
 										# Attempt to download driver package content
 										Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
-										$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+										switch ($DeploymentType) {
+											"PreCache" {
+												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage" -IsNotCustom
+											}
+											Default {
+												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+											}
+										}
 										
 										try {
 											if ($DownloadInvocation -eq 0) {
@@ -998,6 +1029,10 @@ Process {
 														Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
 														$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
 														Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
+													}
+													"PreCache" {
+														# Note that drivers have been downloaded succesfully - our work here is done!
+														Write-CMLogEntry -Value "Driver package content downloaded successfully to: $($OSDDriverPackageLocation)" -Severity 1
 													}
 												}
 											}
@@ -1122,6 +1157,10 @@ Process {
 														# Apply drivers recursively from downloaded driver package location
 														Write-CMLogEntry -Value "Driver fallback package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
 														$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
+													}
+													"PreCache" {
+														# Not a supported scenario as of yet
+														Write-CMLogEntry -Value "Fall back driver package mode is not supported for PreCaching, bailing out" -Severity 2
 													}
 												}
 											}
