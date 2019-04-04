@@ -35,6 +35,9 @@
 .PARAMETER OSImageTSVariableName
 	Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.
 
+.PARAMETER PkgShare
+    Specify the share name used when a task sequence accesses content directly from the distribution point.
+
 .EXAMPLE
 	# Detect, download and apply drivers during OS deployment with ConfigMgr:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
@@ -152,7 +155,11 @@ param (
 
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a task sequence package ID for a child task sequence. Should only be used when the Apply Operating System step is in a child task sequence.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$OverrideTSPackageID
+	[string]$OverrideTSPackageID,
+
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify the share name used when a task sequence accesses content directly from the distribution point.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$PkgShare
 )
 Begin {
 	# Define script version
@@ -310,11 +317,37 @@ Process {
 			
 			if ($TSEnvironment.Value("_SMSTSInWinPE") -eq $false) {
 				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
+				
+                if ($TSEnvironment.Value("_SMSTSDownloadOnDemand") -eq $true) {
+                    $ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
+                }
+                else {
+                    $TSEnvironment.GetVariables() | % { Set-Variable -Name "$_" -Value "$($TSEnvironment.Value($_))" }
+                    Copy-Item -Path "\\$("$SMSDP\$($PkgShare)\$($OSDDownloadDownloadPackages)")" -Destination "$(Join-Path $OSDDownloadDestinationPath $OSDDownloadDownloadPackages)" -Recurse
+                    if ($? -eq $True){
+                        $ReturnCode = 0
+                    }
+                    else {
+                        $ReturnCode = $?
+                    }
+                }
 			}
 			else {
 				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+                
+                if ($TSEnvironment.Value("_SMSTSDownloadOnDemand") -eq $true) {
+				    $ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
+                }
+                else {
+                    $TSEnvironment.GetVariables() | % { Set-Variable -Name "$_" -Value "$($TSEnvironment.Value($_))" }
+                    Copy-Item -Path "\\$("$SMSDP\$($PkgShare)\$($OSDDownloadDownloadPackages)")" -Destination "$(Join-Path $OSDDownloadDestinationPath $OSDDownloadDownloadPackages)" -Recurse
+                    if ($? -eq $true){
+                        $ReturnCode = 0
+                    }
+                    else {
+                        $ReturnCode = $?
+                    }
+                }
 			}
 			
 			# Match on return code
@@ -805,7 +838,12 @@ Process {
 									
 									try {
 										if ($DownloadInvocation -eq 0) {
-											$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+                                            if ($TSEnvironment.Value("_SMSTSDownloadOnDemand") -eq $true) {
+											    $OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+                                            }
+                                            else{
+                                                $OSDDriverPackageLocation = "$(Join-Path $($TSEnvironment.Value("OSDDownloadDestinationPath")) $($TSEnvironment.Value("OSDDownloadDownloadPackages")))"
+                                            }
 											Write-CMLogEntry -Value "Driver files are storage location set to $OSDDriverPackageLocation" -Severity 1
 											
 											switch ($DeploymentType) {
@@ -935,7 +973,13 @@ Process {
 										
 										try {
 											if ($DownloadInvocation -eq 0) {
-												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+
+                                                if ($TSEnvironment.Value("_SMSTSDownloadOnDemand") -eq $true) {
+											        $OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+                                                }
+                                                else{
+                                                    $OSDDriverPackageLocation = "$(Join-Path $OSDDownloadDestinationPath $OSDDownloadDownloadPackages)"
+                                                }
 												switch ($DeploymentType) {
 													"BareMetal" {
 														# Apply drivers recursively from downloaded driver package location
@@ -1065,7 +1109,12 @@ Process {
 										
 										try {
 											if ($DownloadInvocation -eq 0) {
-												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+                                                if ($TSEnvironment.Value("_SMSTSDownloadOnDemand") -eq $true) {
+											        $OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+                                                }
+                                                else{
+                                                    $OSDDriverPackageLocation = "$(Join-Path $($TSEnvironment.Value("OSDDownloadDestinationPath")) $($TSEnvironment.Value("OSDDownloadDownloadPackages")))"
+                                                }
 												Write-CMLogEntry -Value "Driver files are storage location set to $($OSDDriverPackageLocation)" -Severity 1
 												switch ($DeploymentType) {
 													"BareMetal" {
