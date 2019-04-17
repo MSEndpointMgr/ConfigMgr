@@ -27,6 +27,7 @@
                          NOTE - Offset is always calculated from the day AFTER patch tuesday 0 = Patch Wednesday
     1.0.7 - (2019-04-09) Added parameter for CollectionName Structure
                         NOTE - DONT CHANGE THIS IF YOU USED THE DEFAULT CREATE-MAINTENANCECOLLECTIONS.PS1 SCRIPT
+    1.0.8 - (2019-04-17) - Remediated bug forgot to add in $Starthour variable to ensure correct start time. 
                         
 
 #>
@@ -284,7 +285,7 @@ Function start-WindowCreation{
             Days to add after Patch Tuesday: $TotalDaysAdded" -Verbose
         Write-Verbose -Message "Creating maintenance windows for collection $($collection.name.ToUpper())" -Verbose
         #write-host ".\createmw.ps1 -sitecode $Sitecode -MaintenanceWindowName `"$MWNameDetail`" -CollectionID $($Collection.collectionid) -HourDuration $MWDuration -MinuteDuration $MinuteDuration -swtype Updates -PatchTuesday -AddDays $TotalDaysAdded -StartYear $Year -StartMinute $StartMinute -AddMaintenanceWindowNameMonth -MaintenanceWindowDescription `"$MWDescription`""
-        Invoke-Expression ".\createmw.ps1 -sitecode $Sitecode -MaintenanceWindowName `"$MWName`" -CollectionID $($Collection.collectionid) -HourDuration $MWDuration -MinuteDuration $MinuteDuration -swtype Updates -PatchTuesday -AddDays $TotalDaysAdded -StartYear $Year -StartHour 0 -StartMinute $StartMinute -AddMaintenanceWindowNameMonth -MaintenanceWindowDescription `"$MWDescription`""
+        Invoke-Expression ".\createmw.ps1 -sitecode $Sitecode -MaintenanceWindowName `"$MWName`" -CollectionID $($Collection.collectionid) -HourDuration $MWDuration -MinuteDuration $MinuteDuration -swtype Updates -PatchTuesday -AddDays $TotalDaysAdded -StartYear $Year -StartHour $StartHour -StartMinute $StartMinute -AddMaintenanceWindowNameMonth -MaintenanceWindowDescription `"$MWDescription`""
     }
 }
 
