@@ -15,10 +15,13 @@
 	Specify the known secret key for the ConfigMgr WebService.
 
 .PARAMETER DeploymentType
-	Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.	
+	Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade, DriverUpdate or PreCache (Same as OSUpgrade but only downloads the package content).
 	
 .PARAMETER Filter
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
+
+.PARAMETER OperationalMode
+	Define the operational mode, either Production or Pilot, for when calling ConfigMgr WebService to only return objects matching the selected operational mode.
 
 .PARAMETER UseDriverFallback
 	Specify if the script is to be used with a driver fallback package.
@@ -51,12 +54,15 @@
 	# Detect, download and apply drivers during OS deployment with ConfigMgr when using multiple Apply Operating System steps in the task sequence:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -OSImageTSVariableName "OSImageVariable"
 
+	# Detect and download (pre-caching content) during OS upgrade with ConfigMgr:
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType "PreCache"
+
 .NOTES
     FileName:    Invoke-CMApplyDriverPackage.ps1
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2019-02-13
+    Updated:     2019-03-29
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
     
@@ -107,6 +113,9 @@
 	2.1.7 - (2019-02-13) Added support for Windows 10 version 1809 in the Get-OSDetails function
 	2.1.8 - (2019-02-13) Added trimming of manufacturer and models data gathering from WMI
 	2.1.9 - (2019-03-06) Added support for non-terminating error when no matching driver packages where detected for OSUpgrade and DriverUpdate deployment types
+	2.2.0 - (2019-03-08) Fixed an issue when attempting to run the script with -DebugMode switch that would cause it to break when it couldn't load the TS environment
+	2.2.1 - (2019-03-29) New deployment type named 'PreCache' that allows the script to run in a pre-caching mode in a content pre-cache task sequence. When this deployment type is used, content will only be downloaded if it doesn't already
+						 exist in the CCMCache. New parameter OperationalMode (defaults to Production) for better handling driver packages set for Pilot or Production deployment.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -120,15 +129,21 @@ param (
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
 	
-	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or DriverUpdate.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade, DriverUpdate or PreCache (Same as OSUpgrade but only downloads the package content).")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
-	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate")]
+	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate", "PreCache")]
 	[string]$DeploymentType = "BareMetal",
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[ValidateNotNullOrEmpty()]
 	[string]$Filter = "Driver",
+
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the operational mode, either Production or Pilot, for when calling ConfigMgr WebService to only return objects matching the selected operational mode.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
+	[ValidateNotNullOrEmpty()]
+	[ValidateSet("Production", "Pilot")]
+	[string]$OperationalMode = "Production",
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify if the script is to be used with a driver fallback package.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
@@ -156,14 +171,14 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.9"
+	$ScriptVersion = "2.2.1"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
 		$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
 	}
 	catch [System.Exception] {
-		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"; break
+		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"
 	}
 }
 Process {
@@ -203,12 +218,16 @@ Process {
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
 		
 		# Construct time stamp for log entry
-		If (-not(Test-Path -Path 'variable:global:TimezoneBias')) {
+		if (-not(Test-Path -Path 'variable:global:TimezoneBias')) {
 			[string]$global:TimezoneBias = [System.TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).TotalMinutes
-			If ($TimezoneBias -match "^-") {$TimezoneBias = $TimezoneBias.Replace('-', '+')# flip the offset value from negative to positive
-			} else {$TimezoneBias = '-' + $TimezoneBias }
+			if ($TimezoneBias -match "^-") {
+				$TimezoneBias = $TimezoneBias.Replace('-', '+')
+			}
+			else {
+				$TimezoneBias = '-' + $TimezoneBias
+			}
 		}
-		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias) #"+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
+		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias)
 		
 		# Construct date for log entry
 		$Date = (Get-Date -Format "MM-dd-yyyy")
@@ -241,10 +260,10 @@ Process {
 		
 		# Construct a hash-table for default parameter splatting
 		$SplatArgs = @{
-			FilePath	 = $FilePath
-			NoNewWindow  = $true
-			Passthru	 = $true
-			ErrorAction  = "Stop"
+			FilePath = $FilePath
+			NoNewWindow = $true
+			Passthru = $true
+			ErrorAction = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -310,7 +329,7 @@ Process {
 			
 			if ($TSEnvironment.Value("_SMSTSInWinPE") -eq $false) {
 				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
+				$ReturnCode = Invoke-Executable -FilePath (Join-Path -Path $env:windir -ChildPath "CCM\OSDDownloadContent.exe")
 			}
 			else {
 				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
@@ -561,7 +580,7 @@ Process {
 	# Fall back SystemSKU details	
 	switch ($ComputerManufacturer) {
 		"Dell" {
-			[string]$OEMString = Get-WmiObject -Class Win32_ComputerSystem | Select -ExpandProperty OEMStringArray
+			[string]$OEMString = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty OEMStringArray
 			$FallBackSKU = [regex]::Matches($OEMString, '\[\S*]')[0].Value.TrimStart("[").TrimEnd("]")
 		}
 	}
@@ -594,7 +613,14 @@ Process {
 	
 	# Call web service for a list of packages
 	try {
-		$Packages = $WebService.GetCMPackage($SecretKey, $Filter)
+		switch ($OperationalMode) {
+			"Production" {
+				$Packages = $WebService.GetCMPackage($SecretKey, $Filter)
+			}
+			"Pilot" {
+				$Packages = $WebService.GetCMPackage($SecretKey, $Filter) | Where-Object { $_.PackageName -match "Pilot" }
+			}
+		}
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) driver packages from web service" -Severity 1
 	}
 	catch [System.Exception] {
@@ -648,6 +674,22 @@ Process {
 			# Translate operating system architecture from running operating system
 			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
 		}
+		"PreCache" {
+			# Get OS Image data
+			$OSImageData = Get-OSImageData
+			
+			# Get OS data
+			$OSImageVersion = $OSImageData.OSVersion
+			$OSArchitecture = $OSImageData.OSArchitecture
+			
+			# Translate operating system name from version
+			$OSDetails = Get-OSDetails -InputObject $OSImageVersion
+			$OSName = $OSDetails.OSName
+			$OSVersion = $OSDetails.OSVersion
+			
+			# Translate operating system architecture from web service response
+			$OSImageArchitecture = Get-OSArchitecture -InputObject $OSArchitecture
+		}		
 	}
 	
 	# Validate operating system name was detected
@@ -801,12 +843,19 @@ Process {
 								try {
 									# Attempt to download driver package content
 									Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content - $($PackageList[0].PackageID)" -Severity 1
-									$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+									switch ($DeploymentType) {
+										"PreCache" {
+											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
+										}
+										Default {
+											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+										}
+									}
 									
 									try {
 										if ($DownloadInvocation -eq 0) {
 											$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
-											Write-CMLogEntry -Value "Driver files are storage location set to $OSDDriverPackageLocation" -Severity 1
+											Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
 											
 											switch ($DeploymentType) {
 												"BareMetal" {
@@ -871,6 +920,10 @@ Process {
 													$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
 													Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
 												}
+												"PreCache" {
+													# Driver package content downloaded successfully, log output and exit script
+													Write-CMLogEntry -Value "Driver package content successfully downloaded and pre-cached to: $($OSDDriverPackageLocation)" -Severity 1
+												}
 											}
 										}
 										else {
@@ -931,11 +984,20 @@ Process {
 									if ($Package -ne $null) {
 										# Attempt to download driver package content
 										Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
-										$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+										switch ($DeploymentType) {
+											"PreCache" {
+												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
+											}
+											Default {
+												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+											}
+										}
 										
 										try {
 											if ($DownloadInvocation -eq 0) {
 												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+												Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
+
 												switch ($DeploymentType) {
 													"BareMetal" {
 														# Apply drivers recursively from downloaded driver package location
@@ -998,6 +1060,10 @@ Process {
 														Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
 														$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
 														Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
+													}
+													"PreCache" {
+														# Driver package content downloaded successfully, log output and exit script
+														Write-CMLogEntry -Value "Driver package content successfully downloaded and pre-cached to: $($OSDDriverPackageLocation)" -Severity 1
 													}
 												}
 											}
