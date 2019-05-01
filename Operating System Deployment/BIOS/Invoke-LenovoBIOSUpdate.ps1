@@ -35,6 +35,7 @@
 	1.0.5 - (2018-05-08) Updated to cater for varying OS source directory paths
 	1.0.6 - (2018-12-10) Updated to support 64-bit version of Flash64.cmd
 	1.0.7 - (2019-05-01) Extended the search for OLEDLG.dll to include X: for when running from WinPE
+	1.0.8 - (2019-05-01) Fixed a bug where the script would show an error and fail if the WinUPTP log file could not be found
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -173,9 +174,11 @@ Process {
 			
 			#Get winuptp.log file
 			$WinUPTPLog = Get-ChildItem -Filter "*.log" -Recurse | Where-Object { $_.Name -like "winuptp.log" } -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-			Write-CMLogEntry -Value "winuptp.log file path is $($WinUPTPLog)" -Severity 1
-			$smstslogpath = Join-Path -Path $TSEnvironment.Value("_SMSTSLogPath") -ChildPath "winuptp.log"
-			Copy-Item -Path $WinUPTPLog -Destination $smstslogpath -Force -ErrorAction SilentlyContinue
+			if ($WinUPTPLog -ne $null) {
+				Write-CMLogEntry -Value "winuptp.log file path is $($WinUPTPLog)" -Severity 1
+				$SMSTSLogPath = Join-Path -Path $TSEnvironment.Value("_SMSTSLogPath") -ChildPath "winuptp.log"
+				Copy-Item -Path $WinUPTPLog -Destination $SMSTSLogPath -Force -ErrorAction SilentlyContinue
+			}
 		}
 		catch [System.Exception] {
 			Write-CMLogEntry -Value "An error occured while updating the system BIOS in OS online phase. Error message: $($_.Exception.Message)" -Severity 3; exit 1
