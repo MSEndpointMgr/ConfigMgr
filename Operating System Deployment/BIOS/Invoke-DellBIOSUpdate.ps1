@@ -20,9 +20,9 @@
 .NOTES
     FileName:    Invoke-DellBIOSUpdate.ps1
     Authors:     Maurice Daly & Nickolaj Andersen
-    Contact:     @modaly_it
+    Contact:     @modaly_it / @NickolajA
     Created:     2017-05-30
-    Updated:     2019-19-02
+    Updated:     2019-05-01
     
     Version history:
     1.0.0 - (2017-05-30) Script created (Maurice Daly)
@@ -34,7 +34,8 @@
 	1.0.6 - (2018-12-04) Variable name correction in example. No functional changes
 	1.0.7 - (2019-02-05) Removed requirement for OSDBIOSPackage01 variable. Script will now default to this value.
 						 Added registry stamping function
-	1.0.8 - (2019-19-02) Updated path and task sequence handling
+	1.0.8 - (2019-03-02) Updated path and task sequence handling
+	1.0.9 - (2019-05-01) Removed the /f switch that bypasses the model check and could possibly incorrectly flash the system with a wrong BIOS package if Dell somehow messes up with the downloaded bits
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -126,7 +127,7 @@ Process {
 				$BIOSLogFile = Join-Path -Path $TSEnvironment.Value("_SMSTSLogPath") -ChildPath $LogFileName
 
 				# Set required switches for silent upgrade of the bios and logging
-				$FlashSwitches = "/b=$($CurrentBIOSFile) /s /f /l=$($BIOSLogFile)"
+				$FlashSwitches = "/b=$($CurrentBIOSFile) /s /l=$($BIOSLogFile)"
 
 				# Add password to the Flash64W.exe switches
 				if ($PSBoundParameters["Password"]) {
