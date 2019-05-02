@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2019-05-01
+    Updated:     2019-05-02
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -56,6 +56,7 @@
 						 Additional logging output
 	2.0.7 - (2018-11-27) Added logic for HP BIOS version differences in new models
 	2.0.8 - (2019-05-01) Updated the computer model detection section and current BIOS version logic to support formats of XX.XX and XX.XX.XX
+	2.0.9 - (2019-05-02) Updated the script to support BIOS versioning in the F.XX format
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -337,29 +338,52 @@ Process {
 		if ($ComputerManufacturer -match "Hewlett-Packard") {
 			# Obtain current BIOS release
 			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select-Object -Property *)
+
 			# Update version formatting
 			$AvailableBIOSVersion = $AvailableBIOSVersion.TrimEnd(".")
+
 			# Detect new versus old BIOS formats
 			switch -wildcard ($($CurrentBIOSProperties.SMBIOSBIOSVersion)) {
 				"*ver*" {
-					$CurrentBIOSVersion = [System.Version]::Parse(($CurrentBIOSProperties.SMBIOSBIOSVersion).TrimStart($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0]).TrimStart(".").Trim())
+					if ($CurrentBIOSProperties.SMBIOSBIOSVersion -match '.F.\d+$') {
+						$CurrentBIOSVersion = ($CurrentBIOSProperties.SMBIOSBIOSVersion -split "Ver.")[1].Trim()
+						$BIOSVersionParseable = $false
+					}
+					else {
+						$CurrentBIOSVersion = [System.Version]::Parse(($CurrentBIOSProperties.SMBIOSBIOSVersion).TrimStart($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0]).TrimStart(".").Trim())
+						$BIOSVersionParseable = $true
+					}
 				}
 				default {
 					$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
+					$BIOSVersionParseable = $true
 				}
 			}
 
 			# Output version details
 			Write-CMLogEntry -Value "Current BIOS release detected as $($CurrentBIOSVersion)." -Severity 1
-			Write-CMLogEntry -Value "Available BIOS release deteced as $($AvailableBIOSVersion)." -Severity 1
+			Write-CMLogEntry -Value "Available BIOS release detected as $($AvailableBIOSVersion)." -Severity 1
 			
 			# Compare current BIOS release to available
-			if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
-				# Write output to task sequence variable
-				if ($DebugMode -ne $true) {
-					$TSEnvironment.Value("NewBIOSAvailable") = $true
+			switch ($BIOSVersionParseable) {
+				$true {
+					if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
+						# Write output to task sequence variable
+						if ($DebugMode -ne $true) {
+							$TSEnvironment.Value("NewBIOSAvailable") = $true
+						}
+						Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+					}
 				}
-				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+				$false {
+					if ([System.Int32]::Parse($AvailableBIOSVersion.TrimStart("F.")) -gt [System.Int32]::Parse($CurrentBIOSVersion.TrimStart("F."))) {
+						# Write output to task sequence variable
+						if ($DebugMode -ne $true) {
+							$TSEnvironment.Value("NewBIOSAvailable") = $true
+						}
+						Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+					}
+				}
 			}
 		}
 	}
