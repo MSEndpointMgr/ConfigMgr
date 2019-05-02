@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2018-11-27
+    Updated:     2019-05-01
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -55,6 +55,7 @@
 	2.0.6 - (2018-05-29) Added logic to all for the fallback to model name matching for BIOS update packages
 						 Additional logging output
 	2.0.7 - (2018-11-27) Added logic for HP BIOS version differences in new models
+	2.0.8 - (2019-05-01) Updated the computer model detection section and current BIOS version logic to support formats of XX.XX and XX.XX.XX
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -189,7 +190,7 @@ Process {
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
+			[ValidatePattern('^[A-Z0-9]{3}[A-F0-9]{5}$')]
 			[string]$PackageID,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
@@ -283,8 +284,8 @@ Process {
 		if ($ComputerManufacturer -match "Dell") {
 			# Obtain current BIOS release
 			$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
-			Write-CMLogEntry -Value "Available BIOS release deteced as $AvailableBIOSVersion." -Severity 1
+			Write-CMLogEntry -Value "Current BIOS release detected as $($CurrentBIOSVersion)." -Severity 1
+			Write-CMLogEntry -Value "Available BIOS release deteced as $($AvailableBIOSVersion)." -Severity 1
 			
 			# Determine Dell BIOS revision format			
 			if ($CurrentBIOSVersion -like "*.*.*") {
@@ -305,14 +306,14 @@ Process {
 					if ($DebugMode -ne $true) {
 						$TSEnvironment.Value("NewBIOSAvailable") = $true
 					}
-					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $CurrentBIOSVersion will be replaced by $AvailableBIOSVersion." -Severity 1
+					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
 				}
 				elseif ($AvailableBIOSVersion -gt $CurrentBIOSVersion) {
 					# Write output to task sequence variable
 					if ($DebugMode -ne $true) {
 						$TSEnvironment.Value("NewBIOSAvailable") = $true
 					}
-					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $CurrentBIOSVersion will be replaced by $AvailableBIOSVersion." -Severity 1
+					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
 				}
 			}
 		}
@@ -320,8 +321,8 @@ Process {
 		if ($ComputerManufacturer -match "Lenovo") {
 			# Obtain current BIOS release
 			$CurrentBIOSReleaseDate = ((Get-WmiObject -Class Win32_BIOS | Select-Object -Property *).ReleaseDate).SubString(0, 8)
-			Write-CMLogEntry -Value "Current BIOS release date detected as $CurrentBIOSReleaseDate." -Severity 1
-			Write-CMLogEntry -Value "Available BIOS release date detected as $AvailableBIOSReleaseDate." -Severity 1
+			Write-CMLogEntry -Value "Current BIOS release date detected as $($CurrentBIOSReleaseDate)." -Severity 1
+			Write-CMLogEntry -Value "Available BIOS release date detected as $($AvailableBIOSReleaseDate)." -Severity 1
 			
 			# Compare current BIOS release to available
 			if ($AvailableBIOSReleaseDate -gt $CurrentBIOSReleaseDate) {
@@ -329,7 +330,7 @@ Process {
 				if ($DebugMode -ne $true) {
 					$TSEnvironment.Value("NewBIOSAvailable") = $true
 				}
-				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current date release dated $CurrentBIOSReleaseDate will be replaced by release $AvailableBIOSReleaseDate." -Severity 1
+				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current date release dated $($CurrentBIOSReleaseDate) will be replaced by release $($AvailableBIOSReleaseDate)." -Severity 1
 			}
 		}
 		
@@ -341,15 +342,16 @@ Process {
 			# Detect new versus old BIOS formats
 			switch -wildcard ($($CurrentBIOSProperties.SMBIOSBIOSVersion)) {
 				"*ver*" {
-					$CurrentBIOSVersion = [System.Version]::Parse(((($CurrentBIOSProperties.SMBIOSBIOSVersion).Trim($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0])).TrimStart(".")).Trim())
+					$CurrentBIOSVersion = [System.Version]::Parse(($CurrentBIOSProperties.SMBIOSBIOSVersion).TrimStart($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0]).TrimStart(".").Trim())
 				}
 				default {
 					$CurrentBIOSVersion = "$($CurrentBIOSProperties.SystemBiosMajorVersion).$($CurrentBIOSProperties.SystemBiosMinorVersion)"
 				}
 			}
+
 			# Output version details
-			Write-CMLogEntry -Value "Current BIOS release detected as $CurrentBIOSVersion." -Severity 1
-			Write-CMLogEntry -Value "Available BIOS release deteced as $AvailableBIOSVersion." -Severity 1
+			Write-CMLogEntry -Value "Current BIOS release detected as $($CurrentBIOSVersion)." -Severity 1
+			Write-CMLogEntry -Value "Available BIOS release deteced as $($AvailableBIOSVersion)." -Severity 1
 			
 			# Compare current BIOS release to available
 			if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
@@ -374,26 +376,27 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			#$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
 		}
 		"*Hewlett-Packard*" {
 			$ComputerManufacturer = "Hewlett-Packard"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
 		}
 		"*Dell*" {
 			$ComputerManufacturer = "Dell"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku.Trim()
 		}
 		"*Lenovo*" {
 			$ComputerManufacturer = "Lenovo"
-			$ComputerModel = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version).Trim()
 			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
 		}
 	}
