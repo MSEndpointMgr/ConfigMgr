@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2019-05-02
+    Updated:     2019-05-07
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -57,6 +57,7 @@
 	2.0.7 - (2018-11-27) Added logic for HP BIOS version differences in new models
 	2.0.8 - (2019-05-01) Updated the computer model detection section and current BIOS version logic to support formats of XX.XX and XX.XX.XX
 	2.0.9 - (2019-05-02) Updated the script to support BIOS versioning in the F.XX format
+	2.1.0 - (2019-05-07) Updated the script to support BIOS versioning in the 'XX.XX.XX X X' format
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -80,6 +81,9 @@ param (
 	[switch]$DebugMode
 )
 Begin {
+	# Define script version
+	$ScriptVersion = "2.1.0"
+
 	if (-not ($PSBoundParameters["DebugMode"])) {
 		# Load Microsoft.SMS.TSEnvironment COM object
 		try {
@@ -110,7 +114,7 @@ Begin {
 }
 Process {
    	 # SSL Certificate Validation Workaround
-    	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}	
+	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}	
 
 	# Functions
 	function Write-CMLogEntry {
@@ -350,7 +354,7 @@ Process {
 						$BIOSVersionParseable = $false
 					}
 					else {
-						$CurrentBIOSVersion = [System.Version]::Parse(($CurrentBIOSProperties.SMBIOSBIOSVersion).TrimStart($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0]).TrimStart(".").Trim())
+						$CurrentBIOSVersion = [System.Version]::Parse(($CurrentBIOSProperties.SMBIOSBIOSVersion).TrimStart($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0]).TrimStart(".").Trim().Split(" ")[0])
 						$BIOSVersionParseable = $true
 					}
 				}
@@ -389,7 +393,7 @@ Process {
 	}
 	
 	# Write log file for script execution
-	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version 2.0.7" -Severity 1
+	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version $($ScriptVersion)" -Severity 1
 	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
 	
 	# Determine manufacturer
