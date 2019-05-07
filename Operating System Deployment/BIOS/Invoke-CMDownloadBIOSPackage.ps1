@@ -345,6 +345,7 @@ Process {
 
 			# Update version formatting
 			$AvailableBIOSVersion = $AvailableBIOSVersion.TrimEnd(".")
+			$AvailableBIOSVersion = $AvailableBIOSVersion.Split(" ")[0]
 
 			# Detect new versus old BIOS formats
 			switch -wildcard ($($CurrentBIOSProperties.SMBIOSBIOSVersion)) {
