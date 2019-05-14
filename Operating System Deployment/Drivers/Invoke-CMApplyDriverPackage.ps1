@@ -735,7 +735,7 @@ Process {
 
 							switch ($ComputerDetectionMethod) {
 								"ComputerModel" {
-									if ($PackageNameComputerModel -match $ComputerModel) {
+									if ($PackageNameComputerModel -like $ComputerModel) {
 										Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
 										$ComputerDetectionResult = $true
 									}
