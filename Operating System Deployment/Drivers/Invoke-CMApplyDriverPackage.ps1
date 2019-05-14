@@ -118,6 +118,7 @@
 	2.2.1 - (2019-03-29) New deployment type named 'PreCache' that allows the script to run in a pre-caching mode in a content pre-cache task sequence. When this deployment type is used, content will only be downloaded if it doesn't already
 						 exist in the CCMCache. New parameter OperationalMode (defaults to Production) for better handling driver packages set for Pilot or Production deployment.
 	2.2.2 - (2019-05-14) Improved the Surface model detection from WMI
+	2.2.3 - (2019-05-14) Fixed an issue when multiple matching driver packages for a given model would only attempt to format the computer model name correctly for HP computers
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -173,7 +174,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.2.2"
+	$ScriptVersion = "2.2.3"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -953,7 +954,7 @@ Process {
 												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
 											}
 											Default {
-												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
+												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace($ComputerManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
 											}
 										}
 										if ($PackageNameComputerModel -notmatch $ComputerModel) {
