@@ -17,14 +17,14 @@
 	Set the name of the log file produced by the flash utility.
 	
 .EXAMPLE
-	.\Invoke-LenovoBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -Password "BIOSPassword" -LogFileName "LogFileName.log"
+	.\Invoke-LenovoBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -Password "BIOSPassword"
 	
 .NOTES
     FileName:    Invoke-LenovoBIOSUpdate.ps1
     Author:      Maurice Daly / Nickolaj Andersen
     Contact:     @modaly_it / @NickolajA
     Created:     2017-06-09
-    Updated:     2019-05-01
+    Updated:     2019-05-14
     
     Version history:
     1.0.0 - (2017-06-09) Script created
@@ -36,6 +36,7 @@
 	1.0.6 - (2018-12-10) Updated to support 64-bit version of Flash64.cmd
 	1.0.7 - (2019-05-01) Extended the search for OLEDLG.dll to include X: for when running from WinPE
 	1.0.8 - (2019-05-01) Fixed a bug where the script would show an error and fail if the WinUPTP log file could not be found
+	1.0.9 - (2019-05-14) Handle $Password to check if empty string or null instead of just null value
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -155,10 +156,13 @@ Process {
 		Write-CMLogEntry -Value "Supported upgrade utility was not found." -Severity 3; break
 	}
 	
-	if ($Password -ne $null) {
+	if (-not([System.String]::IsNullOrEmpty($Password))) {
 		# Add password to the flash bios switches
-		$FlashSwitches = $FlashSwitches + " /pass:$Password"
+		$FlashSwitches = $FlashSwitches + " /pass:$($Password)"
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches -replace $Password, "<Password Removed>")" -Severity 1
+	}
+	else {
+		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
 	
 	# Set log file location
