@@ -20,9 +20,9 @@
 .NOTES
     FileName:    Invoke-DellBIOSUpdate.ps1
     Authors:     Maurice Daly & Nickolaj Andersen
-    Contact:     @modaly_it / @NickolajA
+    Contact:     @modaly_it
     Created:     2017-05-30
-    Updated:     2019-05-01
+    Updated:     2019-05-14
     
     Version history:
     1.0.0 - (2017-05-30) Script created (Maurice Daly)
@@ -36,6 +36,7 @@
 						 Added registry stamping function
 	1.0.8 - (2019-03-02) Updated path and task sequence handling
 	1.0.9 - (2019-05-01) Removed the /f switch that bypasses the model check and could possibly incorrectly flash the system with a wrong BIOS package if Dell somehow messes up with the downloaded bits
+	1.1.0 - (2019-05-14) Handle log output correctly if $Password is not specified
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -141,20 +142,25 @@ Process {
 
 					try {
 						# Start flash update process
-						Write-CMLogEntry -Value "Using the following switches for Flash64W.exe: $($FlashSwitches -replace $Password, "<password removed>")" -Severity 1
+						if (-not([System.String]::IsNullOrEmpty($Password))) {
+							Write-CMLogEntry -Value "Using the following switches for Flash64W.exe: $($FlashSwitches -replace $Password, "<password removed>")" -Severity 1
+						}
+						else {
+							Write-CMLogEntry -Value "Using the following switches for Flash64W.exe: $($FlashSwitches)" -Severity 1
+						}
 						$FlashProcess = Start-Process -FilePath $FlashUtility -ArgumentList $FlashSwitches -Passthru -Wait -ErrorAction Stop
 						
 						# Set reboot flag if restart required determined (exit code 2)
 						if ($FlashProcess.ExitCode -match "0|2") {
 							# Set reboot required flag
-							$TSEnvironment.Value("SMSTSBiosUpdateRebootRequired") = "True"
-							$TSEnvironment.Value("SMSTSBiosInOSUpdateRequired") = "False"
+							$TSEnvironment.Value("SMSTSBIOSUpdateRebootRequired") = "True"
+							$TSEnvironment.Value("SMSTSBIOSInOSUpdateRequired") = "False"
 						}
 						elseif ($FlashProcess.ExitCode -eq "10") {
 							Write-CMLogEntry -Value "Laptop is on battery power. The AC power must be connected to successfully flash the BIOS." -Severity 3; exit 1
 						}
 						else {
-							Write-CMLogEntry -Value "An error occured while updating the system BIOS during OS offline phase. Please review the log file located at $BIOSLogFile" -Severity 3; exit 1
+							Write-CMLogEntry -Value "An error occured while updating the system BIOS during OS offline phase. Please review the log file located at $($BIOSLogFile)" -Severity 3; exit 1
 						}
 						
 					}
@@ -178,11 +184,15 @@ Process {
 					}
 					
 					# Start BIOS update process
-					try
-					{										
+					try {
 						if (([Environment]::Is64BitOperatingSystem) -eq $true) {
 							Write-CMLogEntry -Value "Starting 64-bit flash BIOS update process" -Severity 1
-							Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches -replace $Password, "<Password Removed>")" -Severity 1
+							if (-not([System.String]::IsNullOrEmpty($Password))) {
+								Write-CMLogEntry -Value "Using the following switches for Flash64W.exe: $($FlashSwitches -replace $Password, "<password removed>")" -Severity 1
+							}
+							else {
+								Write-CMLogEntry -Value "Using the following switches for Flash64W.exe: $($FlashSwitches)" -Severity 1
+							}
 
 							# Update BIOS using Flash64W.exe
 							$FlashUpdate = Start-Process -FilePath $FlashUtility -ArgumentList $FlashSwitches -Passthru -Wait -ErrorAction Stop
@@ -199,15 +209,19 @@ Process {
 							}
 
 							Write-CMLogEntry -Value "Starting 32-bit flash BIOS update process" -Severity 1
-							Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FileSwitches -replace $Password, "<Password Removed>")" -Severity 1						
+							if (-not([System.String]::IsNullOrEmpty($Password))) {
+								Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches -replace $Password, "<password removed>")" -Severity 1
+							}
+							else {
+								Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
+							}
 
 							# Update BIOS using update file
 							$FileUpdate = Start-Process -FilePath $CurrentBIOSFile -ArgumentList $FileSwitches -PassThru -Wait -ErrorAction Stop
 						}
 						
 					}
-					catch [System.Exception]
-					{
+					catch [System.Exception] {
 						Write-CMLogEntry -Value "An error occured while updating the system BIOS in OS online phase. Error message: $($_.Exception.Message)" -Severity 3; exit 1
 					}
 				}
@@ -219,7 +233,8 @@ Process {
 		else {
 			Write-CMLogEntry -Value "Unable to locate the Flash64W.exe utility" -Severity 2 ; exit 1
 		}
-	}else{
+	}
+	else {
 		Write-CMLogEntry -Value "Unable to determine BIOS package path." -Severity 2 ; exit 1
 	}
 }
