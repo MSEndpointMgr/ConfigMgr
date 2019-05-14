@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2019-05-07
+    Updated:     2019-05-14
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -58,6 +58,7 @@
 	2.0.8 - (2019-05-01) Updated the computer model detection section and current BIOS version logic to support formats of XX.XX and XX.XX.XX
 	2.0.9 - (2019-05-02) Updated the script to support BIOS versioning in the F.XX format
 	2.1.0 - (2019-05-07) Updated the script to support BIOS versioning in the 'XX.XX.XX X X' format
+	2.1.1 - (2019-05-14) Updated the script to correctly handling computer models that contains '-' in the model name
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -493,7 +494,7 @@ Process {
 							$PackageNameComputerModel = $Package.PackageName.Replace("Hewlett-Packard", "HP").Split("-").Trim()[1]
 						}
 						Default {
-							$PackageNameComputerModel = $Package.PackageName.Split("-").Replace($ComputerManufacturer, "").Trim()[1]
+							$PackageNameComputerModel = $Package.PackageName.Split("-", 2).Replace($ComputerManufacturer, "").Trim()[1]
 						}
 					}
 					switch ($ComputerDetectionMethod) {
