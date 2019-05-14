@@ -499,7 +499,7 @@ Process {
 					}
 					switch ($ComputerDetectionMethod) {
 						"ComputerModel" {
-							if ($PackageNameComputerModel -match $ComputerModel) {
+							if ($PackageNameComputerModel -like $ComputerModel) {
 								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
 								$ComputerDetectionResult = $true
 							}
@@ -511,7 +511,7 @@ Process {
 							}
 							else {
 								Write-CMLogEntry -Value "Unable to match computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 2
-								if ($PackageNameComputerModel -match $ComputerModel) {
+								if ($PackageNameComputerModel -like $ComputerModel) {
 									Write-CMLogEntry -Value "Fallback from SystemSKU match found for computer model instead using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
 									$ComputerDetectionResult = $true
 								}
