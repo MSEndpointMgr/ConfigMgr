@@ -59,12 +59,13 @@
 
 .NOTES
     FileName:    Invoke-CMApplyDriverPackage.ps1
-    Author:      Nickolaj Andersen / Maurice Daly
+	Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2019-03-29
+    Updated:     2019-05-14
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
+	Contributors: @CodyMathis123, @JamesMcwatty
     
     Version history:
     1.0.0 - (2017-03-27) Script created
@@ -116,6 +117,7 @@
 	2.2.0 - (2019-03-08) Fixed an issue when attempting to run the script with -DebugMode switch that would cause it to break when it couldn't load the TS environment
 	2.2.1 - (2019-03-29) New deployment type named 'PreCache' that allows the script to run in a pre-caching mode in a content pre-cache task sequence. When this deployment type is used, content will only be downloaded if it doesn't already
 						 exist in the CCMCache. New parameter OperationalMode (defaults to Production) for better handling driver packages set for Pilot or Production deployment.
+	2.2.2 - (2019-05-14) Improved the Surface model detection from WMI
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -171,7 +173,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.2.1"
+	$ScriptVersion = "2.2.2"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	try {
@@ -543,7 +545,8 @@ Process {
 	switch -Wildcard ($ComputerManufacturer) {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
+			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
+			#$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
