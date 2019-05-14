@@ -30,6 +30,7 @@
 	1.0.2 - (2018-06-14) Added support for HPFirmwareUpdRec utility - thanks to Jann Idar Hillestad (jihillestad@hotmail.com)
 	1.0.3 - (2019-04-30) Updated to support HPQFlash.exe and HPQFlash64.exe
 	1.0.4 - (2019-05-14) Handle $PasswordBin to check if empty string or null instead of just null value
+	1.0.5 - (2019-05-14) Fixed an issue where the flash utility would look in the script executing location instead of the passed $Path location for the update file
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -158,7 +159,7 @@ Process {
 	
 	if (-not([System.String]::IsNullOrEmpty($PasswordBin))) {
 		# Add password to the flash bios switches
-		$FlashSwitches = $FlashSwitches + " -p$($PSScriptRoot)\$($PasswordBin)"	
+		$FlashSwitches = $FlashSwitches + " -p$($Path)\$($PasswordBin)"	
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
 	else {
