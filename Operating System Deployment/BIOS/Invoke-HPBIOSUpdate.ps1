@@ -22,13 +22,14 @@
     Author:      Lauri Kurvinen / Nickolaj Andersen
     Contact:     @estmi / @NickolajA
     Created:     2017-09-05
-    Updated:     2019-04-30
+    Updated:     2019-05-14
 
     Version history:
 	1.0.0 - (2017-09-05) Script created
 	1.0.1 - (2018-01-30) Updated encrypted volume check and cleaned up some logging messages
 	1.0.2 - (2018-06-14) Added support for HPFirmwareUpdRec utility - thanks to Jann Idar Hillestad (jihillestad@hotmail.com)
 	1.0.3 - (2019-04-30) Updated to support HPQFlash.exe and HPQFlash64.exe
+	1.0.4 - (2019-05-14) Handle $PasswordBin to check if empty string or null instead of just null value
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -155,7 +156,7 @@ Process {
 		Write-CMLogEntry -Value "Supported upgrade utility was not found." -Severity 3; exit 1	
 	}
 	
-	if ($PasswordBin -ne $null) {
+	if (-not([System.String]::IsNullOrEmpty($PasswordBin))) {
 		# Add password to the flash bios switches
 		$FlashSwitches = $FlashSwitches + " -p$($PSScriptRoot)\$($PasswordBin)"	
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
