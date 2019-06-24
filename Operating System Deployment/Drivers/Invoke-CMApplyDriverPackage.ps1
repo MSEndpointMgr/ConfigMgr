@@ -177,11 +177,13 @@ Begin {
 	$ScriptVersion = "2.2.3"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
-	try {
-		$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
-	}
-	catch [System.Exception] {
-		Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"
+	if ($PSCmdLet.ParameterSetName -like "Execute") {
+		try {
+			$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
+		}
+		catch [System.Exception] {
+			Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"
+		}
 	}
 }
 Process {
