@@ -19,11 +19,11 @@
     Authors:     Maurice Daly
     Contact:     @modaly_it
     Created:     2019-07-11
-    Updated:     2019-07-22
+    Updated:     2019-07-25
     
     Version history:
     1.0.0 - (2019-07-11) Script created (Maurice Daly)
-	1.0.1 - (2019-07-22) Minor fixes
+	1.0.2 - (2019-07-25) Minor fixes
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -136,7 +136,6 @@ Process {
 		Write-CMLogEntry -Value "Initiating pnputil to apply firmware updates" -Severity 1
 		$ApplyFirmwareInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDFirmwarePackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-MicrosoftFirmware.txt') -Force"											
 		}
-	}
 	else {
 		Write-CMLogEntry -Value "Unable to determine BIOS package path." -Severity 2 ; exit 1
 	}
