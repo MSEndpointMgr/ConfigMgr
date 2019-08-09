@@ -62,7 +62,7 @@
 	Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2019-05-14
+    Updated:     2019-08-09
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
 	Contributors: @CodyMathis123, @JamesMcwatty
@@ -119,6 +119,7 @@
 						 exist in the CCMCache. New parameter OperationalMode (defaults to Production) for better handling driver packages set for Pilot or Production deployment.
 	2.2.2 - (2019-05-14) Improved the Surface model detection from WMI
 	2.2.3 - (2019-05-14) Fixed an issue when multiple matching driver packages for a given model would only attempt to format the computer model name correctly for HP computers
+	2.2.4 - (2019-08-09) Fixed an issue on OperationalMode Production to filter out pilot and retired packages
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
