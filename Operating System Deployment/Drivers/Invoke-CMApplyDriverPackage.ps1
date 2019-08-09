@@ -621,7 +621,7 @@ Process {
 	try {
 		switch ($OperationalMode) {
 			"Production" {
-				$Packages = $WebService.GetCMPackage($SecretKey, $Filter)
+				$Packages = $WebService.GetCMPackage($SecretKey, $Filter) | Where-Object { $_.PackageName -notmatch "Pilot" -and $_.PackageName -notmatch "Retired" }
 			}
 			"Pilot" {
 				$Packages = $WebService.GetCMPackage($SecretKey, $Filter) | Where-Object { $_.PackageName -match "Pilot" }
