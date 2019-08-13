@@ -17,11 +17,12 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2019-03-10
-    Updated:     2019-05-03
+    Updated:     2019-08-13
 
     Version history:
     1.0.0 - (2019-03-10) Initial script updated with help section and a fix for randomly freezing
     1.1.0 - (2019-05-03) Added support for Windows 10 version 1903 (19H1)
+    1.1.1 - (2019-08-13) Removed the part where it was disabling/enabling configuration for Store updates, as it's not needed
 #>
 Begin {
     # White list of Features On Demand V2 packages
@@ -144,26 +145,6 @@ Process {
     # Initial logging
     Write-LogEntry -Value "Starting built-in AppxPackage, AppxProvisioningPackage and Feature on Demand V2 removal process"
 
-    # Disable automatic store updates and disable InstallService
-    try {
-        # Disable auto-download of store apps
-        Write-LogEntry -Value "Adding registry value to disable automatic store updates"
-        $RegistryWindowsStorePath = "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore"
-        if (-not(Test-Path -Path $RegistryWindowsStorePath)) {
-            New-Item -Path $RegistryWindowsStorePath -ItemType Directory -Force -ErrorAction Stop | Out-Null
-        }
-        Set-RegistryValue -Path $RegistryWindowsStorePath -Name "AutoDownload" -Value "2" -Type "DWORD" -ErrorAction Stop
-
-        # Disable the InstallService service
-        Write-LogEntry -Value "Attempting to stop the InstallService service for automatic store updates"
-        Stop-Service -Name "InstallService" -Force -ErrorAction Stop
-        Write-LogEntry -Value "Attempting to set the InstallService startup behavior to Disabled"
-        Set-Service -Name "InstallService" -StartupType "Disabled" -ErrorAction Stop
-    }
-    catch [System.Exception] {
-        Write-LogEntry -Value "Failed to disable automatic store updates: $($_.Exception.Message)"
-    }
-
     # Determine provisioned apps
     $AppArrayList = Get-AppxProvisionedPackage -Online | Select-Object -ExpandProperty DisplayName
 
@@ -208,20 +189,6 @@ Process {
                 Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
             }
         }
-    }
-
-    # Enable store automatic updates
-    try {
-        $RegistryWindowsStorePath = "HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore"
-        if (Test-RegistryValue -Path $RegistryWindowsStorePath -Name "AutoDownload") {
-            Write-LogEntry -Value "Attempting to remove automatic store update registry values"
-            Remove-ItemProperty -Path $RegistryWindowsStorePath -Name "AutoDownload" -Force -ErrorAction Stop
-        }
-        Write-LogEntry -Value "Attempting to set the InstallService startup behavior to Manual"
-        Set-Service -Name "InstallService" -StartupType "Manual" -ErrorAction Stop
-    }
-    catch [System.Exception] {
-        Write-LogEntry -Value "Failed to enable automatic store updates: $($_.Exception.Message)"
     }
 
     Write-LogEntry -Value "Starting Features on Demand V2 removal process"
