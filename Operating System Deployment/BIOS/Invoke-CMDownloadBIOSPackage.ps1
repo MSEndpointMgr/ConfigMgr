@@ -36,7 +36,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2019-05-14
+    Updated:     2019-07-22
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -59,6 +59,7 @@
 	2.0.9 - (2019-05-02) Updated the script to support BIOS versioning in the F.XX format
 	2.1.0 - (2019-05-07) Updated the script to support BIOS versioning in the 'XX.XX.XX X X' format
 	2.1.1 - (2019-05-14) Updated the script to correctly handling computer models that contains '-' in the model name
+	2.1.2 - (2019-07-22) Updated to support Microsoft Surface devices
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -434,7 +435,7 @@ Process {
 	Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
 	
 	# Supported Manufacturer Array
-	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo")
+	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo","Microsoft")
 	
 	# Get existing BIOS version
 	$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
@@ -550,6 +551,9 @@ Process {
 						elseif ($ComputerManufacturer -match "Hewlett-Packard") {
 							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
 						}
+						elseif ($ComputerManufacturer -match "Microsoft") {
+							$NewBIOSAvailable = $true
+						}
 						
 						if (-not ($PSBoundParameters["DebugMode"])) {
 							if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
@@ -597,6 +601,9 @@ Process {
 							# Determine the latest BIOS package by creation date
 							$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 						}
+						elseif ($ComputerManufacturer -match "Microsoft") {
+							$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
+						}
 						if ($PackageList.Count -eq 1) {
 							# Check if BIOS package is newer than currently installed
 							if ($ComputerManufacturer -match "Dell") {
@@ -607,6 +614,9 @@ Process {
 							}
 							elseif ($ComputerManufacturer -match "Hewlett-Packard") {
 								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
+							}
+							elseif ($ComputerManufacturer -match "Microsoft") {
+								$NewBIOSAvailable = $true
 							}
 							
 							if (-not ($PSBoundParameters["DebugMode"])) {
