@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Download BIOS package (regular package) matching computer model and manufacturer.
 	
@@ -60,6 +60,7 @@
 	2.1.0 - (2019-05-07) Updated the script to support BIOS versioning in the 'XX.XX.XX X X' format
 	2.1.1 - (2019-05-14) Updated the script to correctly handling computer models that contains '-' in the model name
 	2.1.2 - (2019-07-22) Updated to support Microsoft Surface devices
+	2.1.3 - (2019-09-04) Move $null compare to left,according suggestions from powershell analyzer,and using validatescript to replace validatepattern ,and -notcontains to replace -notin for compatible
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -84,7 +85,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.0"
+	$ScriptVersion = "2.1.3"
 
 	if (-not ($PSBoundParameters["DebugMode"])) {
 		# Load Microsoft.SMS.TSEnvironment COM object
@@ -197,7 +198,7 @@ Process {
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[ValidatePattern('^[A-Z0-9]{3}[A-F0-9]{5}$')]
+			[ValidateScript({$_ -match '^[A-Z0-9]{3}[A-F0-9]{5}$'})]
 			[string]$PackageID,
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
@@ -468,10 +469,10 @@ Process {
 	# Validate not virtual machine
 	$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
 	
-	if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
+	if (@("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM") -notcontains $ComputerSystemType) {
 		# Process packages returned from web service
-		if ($Packages -ne $null) {
-			if (($ComputerModel -ne $null) -and (-not ([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not ([System.String]::IsNullOrEmpty($SystemSKU))))) {
+		if ($null -ne $Packages) {
+			if (($null -ne $ComputerModel) -and (-not ([System.String]::IsNullOrEmpty($ComputerModel))) -or (($null -ne $SystemSKU) -and (-not ([System.String]::IsNullOrEmpty($SystemSKU))))) {
 				# Determine computer model detection
 				if ([System.String]::IsNullOrEmpty($SystemSKU)) {
 					Write-CMLogEntry -Value "Attempting to find a match for BIOS package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
@@ -592,7 +593,7 @@ Process {
 								($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)
 							} | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
 							
-							If ($PackageList -eq $null) {
+							If ($null -eq $PackageList) {
 								# Fall back to select the latest model type match if no model name match is found
 								$PackageList = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
 							}
