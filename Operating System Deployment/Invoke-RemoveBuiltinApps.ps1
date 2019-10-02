@@ -17,12 +17,13 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2019-03-10
-    Updated:     2019-08-13
+    Updated:     2019-10-02
 
     Version history:
     1.0.0 - (2019-03-10) Initial script updated with help section and a fix for randomly freezing
     1.1.0 - (2019-05-03) Added support for Windows 10 version 1903 (19H1)
     1.1.1 - (2019-08-13) Removed the part where it was disabling/enabling configuration for Store updates, as it's not needed
+    1.1.2 - (2019-10-02) Updated variables
 #>
 Begin {
     # White list of Features On Demand V2 packages
@@ -61,7 +62,7 @@ Process {
     # Functions
     function Write-LogEntry {
         param(
-            [parameter(Mandatory=$true, HelpMessage="Value added to the RemovedApps.log file.")]
+            [parameter(Mandatory=$true, HelpMessage="Value added to the log file.")]
             [ValidateNotNullOrEmpty()]
             [string]$Value,
 
@@ -77,7 +78,7 @@ Process {
             Out-File -InputObject $Value -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
         }
         catch [System.Exception] {
-            Write-Warning -Message "Unable to append log entry to RemovedApps.log file"
+            Write-Warning -Message "Unable to append log entry to $($FileName) file"
         }
     }
 
@@ -162,7 +163,7 @@ Process {
             $AppProvisioningPackageName = Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like $App } | Select-Object -ExpandProperty PackageName -First 1
 
             # Attempt to remove AppxPackage
-            if ($AppPackageFullName -ne $null) {
+            if ($null -ne $AppPackageFullName) {
                 try {
                     Write-LogEntry -Value "Removing AppxPackage: $($AppPackageFullName)"
                     Remove-AppxPackage -Package $AppPackageFullName -ErrorAction Stop | Out-Null
@@ -172,11 +173,11 @@ Process {
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxPackage: $($AppPackageFullName)"
+                Write-LogEntry -Value "Unable to locate AppxPackage: $($App)"
             }
 
             # Attempt to remove AppxProvisioningPackage
-            if ($AppProvisioningPackageName -ne $null) {
+            if ($null -ne $AppProvisioningPackageName) {
                 try {
                     Write-LogEntry -Value "Removing AppxProvisioningPackage: $($AppProvisioningPackageName)"
                     Remove-AppxProvisionedPackage -PackageName $AppProvisioningPackageName -Online -ErrorAction Stop | Out-Null
@@ -186,7 +187,7 @@ Process {
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
+                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($App)"
             }
         }
     }
