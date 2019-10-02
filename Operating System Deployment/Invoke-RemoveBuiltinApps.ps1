@@ -77,7 +77,7 @@ Process {
             Out-File -InputObject $Value -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
         }
         catch [System.Exception] {
-            Write-Warning -Message "Unable to append log entry to RemovedApps.log file"
+            Write-Warning -Message "Unable to append log entry to $($FileName) file"
         }
     }
 
