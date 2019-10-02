@@ -82,7 +82,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2019-02-20
+    Updated:     2019-09-30
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -97,6 +97,11 @@
     1.1.0 - (2019-02-20) Added support to automatically download the latest Cumulative Update, Servicing Stack Update and Adobe Flash Player update for the specified OSVersion and OSArchitecture.
                          This change requires access to a SMS Provider where the latest update information can be accessed. Updated the help section with information changes to the folder structure that
                          has significantly been reduced. From this version and onwards the script will automatically create all required folders.
+    1.1.1 - (2019-09-30) Added support for new Windows 10 product category 'Windows 10, version 1903 and later' for when updates are located through WSUS and downloaded to staging directory. Fixed an issue
+                         where appx packages would not get removed cause the DisplayName instead of the PackageName property was passed. Also, added support for handling update downloades when multiple
+                         content ID's exist for the same update.
+    1.1.2 - (2019-10-01) Fixed an issue where Cumulative Updates download process would attempt to retrieve the .NET Framework Cumulative Update instead of the one for Windows 10.
+    1.1.3 - (2019-10-02) Fixed an issue where the Invoke-MSUpdateItemDownload function would not download multiple ContentIDs when available (e.g. for .NET Framework updates).
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -286,51 +291,74 @@ Process {
             [ValidateSet("Cumulative Update", "Servicing Stack Update", "Adobe Flash Player", ".NET Framework")]
             [string]$UpdateType
         )
+
+        # Determine correct WMI filtering for version greater than 1903, since it requires a new product type
+        if ([int]$OSVersion -ge 1903) {
+            $WMIQueryFilter = "LocalizedCategoryInstanceNames = 'Windows 10, version 1903 and later'"
+        }
+        else {
+            $WMIQueryFilter = "LocalizedCategoryInstanceNames = 'Windows 10'"
+        }
+
+        # Determine the correct display name filtering options based upon update type
+        switch ($UpdateType) {
+            "Cumulative Update" {
+                $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter $WMIQueryFilter -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.LocalizedDisplayName -notlike "*.NET Framework*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
+            }
+            default {
+                $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter $WMIQueryFilter -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
+            }
+        }
     
-        $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter "LocalizedCategoryInstanceNames = 'Windows 10'" -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
         if ($UpdateItem -ne $null) {
             # Determine the ContentID instances associated with the update instance
-            $UpdateItemContentID = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIToContent -ComputerName $SiteServer -Filter "CI_ID = $($UpdateItem.CI_ID)" -ErrorAction Stop
-            if ($UpdateItemContentID -ne $null) {
-                # Get the content files associated with current Content ID
-                $UpdateItemContent = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIContentFiles -ComputerName $SiteServer -Filter "ContentID = $($UpdateItemContentID.ContentID)" -ErrorAction Stop
-                if ($UpdateItemContent -ne $null) {
-                    # Create new custom object for the update content
-                    $PSObject = [PSCustomObject]@{
-                        "DisplayName" = $UpdateItem.LocalizedDisplayName
-                        "ArticleID" = $UpdateItem.ArticleID
-                        "FileName" = $UpdateItemContent.FileName.Insert($UpdateItemContent.FileName.Length-4, "-$($OSVersion)-$($UpdateType.Replace(' ', ''))")
-                        "SourceURL" = $UpdateItemContent.SourceURL
-                        "DateRevised" = [System.Management.ManagementDateTimeConverter]::ToDateTime($UpdateItem.DateRevised)
+            $UpdateItemContentIDs = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIToContent -ComputerName $SiteServer -Filter "CI_ID = $($UpdateItem.CI_ID)" -ErrorAction Stop
+            if ($UpdateItemContentIDs -ne $null) {
+                # Account for multiple content ID items
+                foreach ($UpdateItemContentID in $UpdateItemContentIDs) {
+                    # Get the content files associated with current Content ID
+                    $UpdateItemContent = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIContentFiles -ComputerName $SiteServer -Filter "ContentID = $($UpdateItemContentID.ContentID)" -ErrorAction Stop
+                    if ($UpdateItemContent -ne $null) {
+                        # Create new custom object for the update content
+                        $PSObject = [PSCustomObject]@{
+                            "DisplayName" = $UpdateItem.LocalizedDisplayName
+                            "ArticleID" = $UpdateItem.ArticleID
+                            "FileName" = $UpdateItemContent.FileName.Insert($UpdateItemContent.FileName.Length-4, "-$($OSVersion)-$($UpdateType.Replace(' ', ''))")
+                            "SourceURL" = $UpdateItemContent.SourceURL
+                            "DateRevised" = [System.Management.ManagementDateTimeConverter]::ToDateTime($UpdateItem.DateRevised)
+                        }
+
+                        try {
+                            # Start the download of the update item
+                            Write-Verbose -Message " - Downloading update item '$($UpdateType)' content from: $($PSObject.SourceURL)"
+                            Start-DownloadFile -URL $PSObject.SourceURL -Path $FilePath -Name $PSObject.FileName -ErrorAction Stop
+                            Write-Verbose -Message " - Completed download successfully and renamed file to: $($PSObject.FileName)"
+                            $ReturnValue = 0
+                        }
+                        catch [System.Exception] {
+                            Write-Warning -Message "Unable to download update item content. Error message: $($_.Exception.Message)"
+                            $ReturnValue = 1
+                        }
                     }
-    
-                    try {
-                        # Start the download of the update item
-                        Write-Verbose -Message " - Downloading update item '$($UpdateType)' content from: $($PSObject.SourceURL)"
-                        Start-DownloadFile -URL $PSObject.SourceURL -Path $FilePath -Name $PSObject.FileName -ErrorAction Stop
-                        Write-Verbose -Message " - Completed download successfully and renamed file to: $($PSObject.FileName)"
-                        return 0
+                    else {
+                        Write-Warning -Message " - Unable to determine update content instance for CI_ID: $($UpdateItemContentID.ContentID)"
+                        $ReturnValue = 1
                     }
-                    catch [System.Exception] {
-                        Write-Warning -Message "Unable to download update item content. Error message: $($_.Exception.Message)"
-                        return 1
-                    }
-                }
-                else {
-                    Write-Warning -Message " - Unable to determine update content instance for CI_ID: $($UpdateItemContentID.ContentID)"
-                    return 1
                 }
             }
             else {
                 Write-Warning -Message " - Unable to determine ContentID instance for CI_ID: $($UpdateItem.CI_ID)"
-                return 1
+                $ReturnValue = 1
             }
         }
         else {
             Write-Warning -Message " - Unable to locate update item from SMS Provider for update type: $($UpdateType)"
-            return 2
+            $ReturnValue = 2
         }
-    }    
+
+        # Handle return value from function
+        return $ReturnValue
+    }
 
     # PowerShell variables
     $ProgressPreference = "SilentlyContinue"
@@ -455,7 +483,7 @@ Process {
     }
 
     # Download update item content
-    $UpdateItemTypeList = @("Cumulative Update", "Servicing Stack Update" , "Adobe Flash Player")
+    $UpdateItemTypeList = @("Cumulative Update", "Servicing Stack Update" , "Adobe Flash Player", ".NET Framework")
     foreach ($UpdateItemType in $UpdateItemTypeList) {
         $Invocation = Invoke-MSUpdateItemDownload -FilePath $UpdateFilesRoot -UpdateType $UpdateItemType
         switch ($Invocation) {
@@ -772,6 +800,14 @@ Process {
                         Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
                         $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
     
+                        #
+                        # Apply .NET Framework CU
+                        # https://support.microsoft.com/en-gb/help/4516550/sep-24-2019-kb4516550-cumulative-update-for-net-framework
+                        # https://support.microsoft.com/en-us/help/4515843/sep-24-2019-kb4515843-cumulative-update-for-net-framework
+                        #
+                        # Needs to handle that there's multiple .NET Framework CU's for various versions of .NET Framework, see above
+                        #
+
                         if ($ReturnValue -eq 0) {
                             # Attempt to apply required updates for OS image: Other
                             Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
@@ -860,22 +896,22 @@ Process {
                                             Write-Verbose -Message " - Attempting to retrieve provisioned appx packages in OS image"
                                             $AppxProvisionedPackagesList = Get-AppxProvisionedPackage -Path $MountPathOSImage -ErrorAction Stop
 
-                                            try {
-                                                # Loop through the list of provisioned appx packages
-                                                foreach ($App in $AppxProvisionedPackagesList) {
-                                                    # Remove provisioned appx package if name not in white list
-                                                    if (($App.DisplayName -in $WhiteListedApps)) {
-                                                        Write-Verbose -Message " - Skipping excluded provisioned appx package: $($App.DisplayName)"
-                                                    }
-                                                    else {
+                                            # Loop through the list of provisioned appx packages
+                                            foreach ($App in $AppxProvisionedPackagesList) {
+                                                # Remove provisioned appx package if name not in white list
+                                                if (($App.DisplayName -in $WhiteListedApps)) {
+                                                    Write-Verbose -Message " - Skipping excluded provisioned appx package: $($App.DisplayName)"
+                                                }
+                                                else {
+                                                    try {
                                                         # Attempt to remove AppxProvisioningPackage
-                                                        Write-Verbose -Message " - Attempting to remove provisioned appx package from OS image: $($App.DisplayName)"
-                                                        Remove-AppxProvisionedPackage -PackageName $App.DisplayName -Path $MountPathOSImage -ErrorAction Stop | Out-Null
+                                                        Write-Verbose -Message " - Attempting to remove provisioned appx package from OS image: $($App.PackageName)"
+                                                        Remove-AppxProvisionedPackage -PackageName $App.PackageName -Path $MountPathOSImage -ErrorAction Stop -Verbose:$false | Out-Null
+                                                    }
+                                                    catch [System.Exception] {
+                                                        Write-Verbose -Message "Failed to remove provisioned appx package '$($App.DisplayName)' in OS image. Error message: $($_.Exception.Message)"
                                                     }
                                                 }
-                                            }
-                                            catch [System.Exception] {
-                                                Write-Verbose -Message "Failed to remove provisioned appx package '$($App.DisplayName)' in OS image. Error message: $($_.Exception.Message)"
                                             }
                                         }
                                         catch [System.Exception] {
