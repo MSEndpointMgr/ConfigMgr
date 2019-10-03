@@ -82,7 +82,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2019-02-20
+    Updated:     2019-10-02
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -97,6 +97,11 @@
     1.1.0 - (2019-02-20) Added support to automatically download the latest Cumulative Update, Servicing Stack Update and Adobe Flash Player update for the specified OSVersion and OSArchitecture.
                          This change requires access to a SMS Provider where the latest update information can be accessed. Updated the help section with information changes to the folder structure that
                          has significantly been reduced. From this version and onwards the script will automatically create all required folders.
+    1.1.1 - (2019-09-30) Added support for new Windows 10 product category 'Windows 10, version 1903 and later' for when updates are located through WSUS and downloaded to staging directory. Fixed an issue
+                         where appx packages would not get removed cause the DisplayName instead of the PackageName property was passed. Also, added support for handling update downloades when multiple
+                         content ID's exist for the same update.
+    1.1.2 - (2019-10-01) Fixed an issue where Cumulative Updates download process would attempt to retrieve the .NET Framework Cumulative Update instead of the one for Windows 10.
+    1.1.3 - (2019-10-02) Fixed an issue where the Invoke-MSUpdateItemDownload function would not download multiple ContentIDs when available (e.g. for .NET Framework updates).
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -286,51 +291,74 @@ Process {
             [ValidateSet("Cumulative Update", "Servicing Stack Update", "Adobe Flash Player", ".NET Framework")]
             [string]$UpdateType
         )
+
+        # Determine correct WMI filtering for version greater than 1903, since it requires a new product type
+        if ([int]$OSVersion -ge 1903) {
+            $WMIQueryFilter = "LocalizedCategoryInstanceNames = 'Windows 10, version 1903 and later'"
+        }
+        else {
+            $WMIQueryFilter = "LocalizedCategoryInstanceNames = 'Windows 10'"
+        }
+
+        # Determine the correct display name filtering options based upon update type
+        switch ($UpdateType) {
+            "Cumulative Update" {
+                $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter $WMIQueryFilter -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.LocalizedDisplayName -notlike "*.NET Framework*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
+            }
+            default {
+                $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter $WMIQueryFilter -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
+            }
+        }
     
-        $UpdateItem = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_SoftwareUpdate -ComputerName $SiteServer -Filter "LocalizedCategoryInstanceNames = 'Windows 10'" -ErrorAction Stop | Where-Object { ($_.LocalizedDisplayName -like "*$($UpdateType)*$($OSVersion)*$($OSArchitecture)*") -and ($_.IsSuperseded -eq $false) -and ($_.IsLatest -eq $true)  } | Sort-Object -Property DatePosted -Descending | Select-Object -First 1
         if ($UpdateItem -ne $null) {
             # Determine the ContentID instances associated with the update instance
-            $UpdateItemContentID = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIToContent -ComputerName $SiteServer -Filter "CI_ID = $($UpdateItem.CI_ID)" -ErrorAction Stop
-            if ($UpdateItemContentID -ne $null) {
-                # Get the content files associated with current Content ID
-                $UpdateItemContent = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIContentFiles -ComputerName $SiteServer -Filter "ContentID = $($UpdateItemContentID.ContentID)" -ErrorAction Stop
-                if ($UpdateItemContent -ne $null) {
-                    # Create new custom object for the update content
-                    $PSObject = [PSCustomObject]@{
-                        "DisplayName" = $UpdateItem.LocalizedDisplayName
-                        "ArticleID" = $UpdateItem.ArticleID
-                        "FileName" = $UpdateItemContent.FileName.Insert($UpdateItemContent.FileName.Length-4, "-$($OSVersion)-$($UpdateType.Replace(' ', ''))")
-                        "SourceURL" = $UpdateItemContent.SourceURL
-                        "DateRevised" = [System.Management.ManagementDateTimeConverter]::ToDateTime($UpdateItem.DateRevised)
+            $UpdateItemContentIDs = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIToContent -ComputerName $SiteServer -Filter "CI_ID = $($UpdateItem.CI_ID)" -ErrorAction Stop
+            if ($UpdateItemContentIDs -ne $null) {
+                # Account for multiple content ID items
+                foreach ($UpdateItemContentID in $UpdateItemContentIDs) {
+                    # Get the content files associated with current Content ID
+                    $UpdateItemContent = Get-WmiObject -Namespace "root\SMS\Site_$($SiteCode)" -Class SMS_CIContentFiles -ComputerName $SiteServer -Filter "ContentID = $($UpdateItemContentID.ContentID)" -ErrorAction Stop
+                    if ($UpdateItemContent -ne $null) {
+                        # Create new custom object for the update content
+                        $PSObject = [PSCustomObject]@{
+                            "DisplayName" = $UpdateItem.LocalizedDisplayName
+                            "ArticleID" = $UpdateItem.ArticleID
+                            "FileName" = $UpdateItemContent.FileName.Insert($UpdateItemContent.FileName.Length-4, "-$($OSVersion)-$($UpdateType.Replace(' ', ''))")
+                            "SourceURL" = $UpdateItemContent.SourceURL
+                            "DateRevised" = [System.Management.ManagementDateTimeConverter]::ToDateTime($UpdateItem.DateRevised)
+                        }
+
+                        try {
+                            # Start the download of the update item
+                            Write-Verbose -Message " - Downloading update item '$($UpdateType)' content from: $($PSObject.SourceURL)"
+                            Start-DownloadFile -URL $PSObject.SourceURL -Path $FilePath -Name $PSObject.FileName -ErrorAction Stop
+                            Write-Verbose -Message " - Completed download successfully and renamed file to: $($PSObject.FileName)"
+                            $ReturnValue = 0
+                        }
+                        catch [System.Exception] {
+                            Write-Warning -Message "Unable to download update item content. Error message: $($_.Exception.Message)"
+                            $ReturnValue = 1
+                        }
                     }
-    
-                    try {
-                        # Start the download of the update item
-                        Write-Verbose -Message " - Downloading update item '$($UpdateType)' content from: $($PSObject.SourceURL)"
-                        Start-DownloadFile -URL $PSObject.SourceURL -Path $FilePath -Name $PSObject.FileName -ErrorAction Stop
-                        Write-Verbose -Message " - Completed download successfully and renamed file to: $($PSObject.FileName)"
-                        return 0
+                    else {
+                        Write-Warning -Message " - Unable to determine update content instance for CI_ID: $($UpdateItemContentID.ContentID)"
+                        $ReturnValue = 1
                     }
-                    catch [System.Exception] {
-                        Write-Warning -Message "Unable to download update item content. Error message: $($_.Exception.Message)"
-                        return 1
-                    }
-                }
-                else {
-                    Write-Warning -Message " - Unable to determine update content instance for CI_ID: $($UpdateItemContentID.ContentID)"
-                    return 1
                 }
             }
             else {
                 Write-Warning -Message " - Unable to determine ContentID instance for CI_ID: $($UpdateItem.CI_ID)"
-                return 1
+                $ReturnValue = 1
             }
         }
         else {
             Write-Warning -Message " - Unable to locate update item from SMS Provider for update type: $($UpdateType)"
-            return 2
+            $ReturnValue = 2
         }
-    }    
+
+        # Handle return value from function
+        return $ReturnValue
+    }
 
     # PowerShell variables
     $ProgressPreference = "SilentlyContinue"
@@ -455,7 +483,7 @@ Process {
     }
 
     # Download update item content
-    $UpdateItemTypeList = @("Cumulative Update", "Servicing Stack Update" , "Adobe Flash Player")
+    $UpdateItemTypeList = @("Cumulative Update", "Servicing Stack Update" , "Adobe Flash Player", ".NET Framework")
     foreach ($UpdateItemType in $UpdateItemTypeList) {
         $Invocation = Invoke-MSUpdateItemDownload -FilePath $UpdateFilesRoot -UpdateType $UpdateItemType
         switch ($Invocation) {
@@ -630,6 +658,24 @@ Process {
         }
     }
 
+    # Validate updates root folder contains required .NET Framework Cumulative Update content cabinet file
+    if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*NETFramework*.cab").Count -ge 1)) {
+        Write-Warning -Message "Unable to detect downloaded '.NET Framework Cumulative Update' content cabinet files, breaking operation"; break
+    }
+    else {
+        # Determine .NET Framework Cumulative Update files to be applied
+        $NETFrameworkUpdateFilePaths = Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*NETFramework*.cab" | Sort-Object -Descending -Property $_.CreationTime | Select-Object -ExpandProperty FullName
+        if ($NETFrameworkUpdateFilePaths -eq $null) {
+            Write-Warning -Message "Failed to locate required .NET Framework Cumulative Update content cabinet files, breaking operation"; break
+        }
+        else {
+            $NETFrameworkUpdateFilePathsCount = ($NETFrameworkUpdateFilePaths | Measure-Object).Count
+            foreach ($NETFrameworkUpdateFilePath in $NETFrameworkUpdateFilePaths) {
+                Write-Verbose -Message " - Selected the .NET Framework Cumulative Update content cabinet file: $($NETFrameworkUpdateFilePath)"
+            }
+        }
+    }    
+
     # Validate updates root folder contains required Adobe Flash Player content cabinet file
     if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*AdobeFlashPlayer*.cab").Count -ge 1)) {
         Write-Warning -Message "Unable to detect downloaded 'Adobe Flash Player' content cabinet file, breaking operation"; break
@@ -773,94 +819,108 @@ Process {
                         $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
     
                         if ($ReturnValue -eq 0) {
-                            # Attempt to apply required updates for OS image: Other
-                            Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
-                            foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
-                                Write-Verbose -Message " - Currently processing: $($OtherUpdateFilePath)"
-                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($OtherUpdateFilePath)"""
+                            # Attempt to apply required updates for OS image: .NET Framework Cumulative Updates
+                            Write-Verbose -Message " - Attempting to apply required patch in OS image for: .NET Framework Cumulative Updates"
+                            $NETFrameworkUpdatesCount = 0
+                            foreach ($NETFrameworkUpdateFilePath in $NETFrameworkUpdateFilePaths) {
+                                Write-Verbose -Message " - Currently processing: $($NETFrameworkUpdateFilePath)"
+                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($NETFrameworkUpdateFilePath)"""
                                 if ($ReturnValue -ne 0) {
-                                    Write-Warning -Message "Failed to apply required patch in OS image for: $($OtherUpdateFilePath)"
+                                    Write-Warning -Message "Failed to apply required patch in OS image for: $($NETFrameworkUpdateFilePath)"
                                 }
-                            }
+                                else {
+                                    $NETFrameworkUpdatesCount++
+                                }
+                            }                        
 
-                            if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
-                                if ($SkipDUCUPatch -ne $true) {
-                                    # Attempt to apply required updates for OS image: Dynamic Updates (DUCU)
-                                    Write-Verbose -Message " - Attempting to apply '$(($UpdatesDUCUFilePaths | Measure-Object).Count)' required patches in OS image for: Dynamic Updates (DUCU)"
-                                    foreach ($UpdatesDUCUFilePath in $UpdatesDUCUFilePaths) {
-                                        Write-Verbose -Message " - Currently processing: $($UpdatesDUCUFilePath)"
-                                        $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($UpdatesDUCUFilePath)"""
-                                        if ($ReturnValue -ne 0) {
-                                            Write-Warning -Message "Failed to apply required patch in OS image for: $($UpdatesDUCUFilePath)"
-                                        }                                        
+                            if (($ReturnValue -eq 0) -and ($NETFrameworkUpdateFilePathsCount -eq $NETFrameworkUpdatesCount)) {
+                                # Attempt to apply required updates for OS image: Other
+                                Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
+                                foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
+                                    Write-Verbose -Message " - Currently processing: $($OtherUpdateFilePath)"
+                                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($OtherUpdateFilePath)"""
+                                    if ($ReturnValue -ne 0) {
+                                        Write-Warning -Message "Failed to apply required patch in OS image for: $($OtherUpdateFilePath)"
+                                    }
+                                }
+
+                                if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
+                                    if ($SkipDUCUPatch -ne $true) {
+                                        # Attempt to apply required updates for OS image: Dynamic Updates (DUCU)
+                                        Write-Verbose -Message " - Attempting to apply '$(($UpdatesDUCUFilePaths | Measure-Object).Count)' required patches in OS image for: Dynamic Updates (DUCU)"
+                                        foreach ($UpdatesDUCUFilePath in $UpdatesDUCUFilePaths) {
+                                            Write-Verbose -Message " - Currently processing: $($UpdatesDUCUFilePath)"
+                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($UpdatesDUCUFilePath)"""
+                                            if ($ReturnValue -ne 0) {
+                                                Write-Warning -Message "Failed to apply required patch in OS image for: $($UpdatesDUCUFilePath)"
+                                            }                                        
+                                        }
+                                    }
+                                    else {
+                                        Write-Verbose -Message " - Skipping Dynamic Updates (DUCU) updates due to missing update files in sub-folder"
                                     }
                                 }
                                 else {
-                                    Write-Verbose -Message " - Skipping Dynamic Updates (DUCU) updates due to missing update files in sub-folder"
+                                    $ReturnValue = 0
                                 }
-                            }
-                            else {
-                                $ReturnValue = 0
-                            }
-    
-                            if ($ReturnValue -eq 0) {
-                                # Cleanup OS image before applying .NET Framework 3.5
-                                Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of OS image, this operation could take some time"
-                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Cleanup-Image /StartComponentCleanup /ResetBase"
-    
+
                                 if ($ReturnValue -eq 0) {
-                                    if ($PSBoundParameters["IncludeNetFramework"]) {
-                                        Write-Verbose -Message " - Include .NET Framework 3.5.1 parameter was specified"
+                                    # Cleanup OS image before applying .NET Framework 3.5
+                                    Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of OS image, this operation could take some time"
+                                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Cleanup-Image /StartComponentCleanup /ResetBase"
 
-                                        # Attempt to apply .NET Framework 3.5.1 to OS image
-                                        $OSMediaSourcesSxsPath = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\sxs"
-                                        Write-Verbose -Message " - Attempting to apply .NET Framework 3.5.1 in OS image"
-                                        $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Enable-Feature /FeatureName:NetFx3 /All /LimitAccess /Source:""$($OSMediaSourcesSxsPath)"""
-    
-                                        if ($ReturnValue -eq 0) {
-                                            # Attempt to re-apply (because of .NET Framework requirements) required updates for OS image: Cumulative Update
-                                            Write-Verbose -Message " - Attempting to re-apply Cumulative Update after .NET Framework 3.5.1 injection"
-                                            Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
-                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
-    
+                                    if ($ReturnValue -eq 0) {
+                                        if ($PSBoundParameters["IncludeNetFramework"]) {
+                                            Write-Verbose -Message " - Include .NET Framework 3.5.1 parameter was specified"
+
+                                            # Attempt to apply .NET Framework 3.5.1 to OS image
+                                            $OSMediaSourcesSxsPath = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\sxs"
+                                            Write-Verbose -Message " - Attempting to apply .NET Framework 3.5.1 in OS image"
+                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Enable-Feature /FeatureName:NetFx3 /All /LimitAccess /Source:""$($OSMediaSourcesSxsPath)"""
+
                                             if ($ReturnValue -eq 0) {
-                                                Write-Verbose -Message " - Successfully re-applied the Cumulative Update patch to OS image"
+                                                # Attempt to re-apply (because of .NET Framework requirements) required updates for OS image: Cumulative Update
+                                                Write-Verbose -Message " - Attempting to re-apply Cumulative Update after .NET Framework 3.5.1 injection"
+                                                Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
+                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
 
-                                                if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
-                                                    if ($SkipDUCUPatch -ne $true) {
-                                                        # Attempt to apply required updates for OS image: Dynamic Updates (DUCU)
-                                                        Write-Verbose -Message " - Attempting to re-apply '$(($UpdatesDUCUFilePaths | Measure-Object).Count)' required Dynamic Updates (DUCU) after .NET Framework 3.5.1 injection"
-                                                        foreach ($UpdatesDUCUFilePath in $UpdatesDUCUFilePaths) {
-                                                            Write-Verbose -Message " - Currently processing: $($UpdatesDUCUFilePath)"
-                                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($UpdatesDUCUFilePath)"""
-                                                            if ($ReturnValue -ne 0) {
-                                                                Write-Warning -Message "Failed to re-apply required patch in OS image for: $($UpdatesDUCUFilePath)"
+                                                if ($ReturnValue -eq 0) {
+                                                    Write-Verbose -Message " - Successfully re-applied the Cumulative Update patch to OS image"
+
+                                                    if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
+                                                        if ($SkipDUCUPatch -ne $true) {
+                                                            # Attempt to apply required updates for OS image: Dynamic Updates (DUCU)
+                                                            Write-Verbose -Message " - Attempting to re-apply '$(($UpdatesDUCUFilePaths | Measure-Object).Count)' required Dynamic Updates (DUCU) after .NET Framework 3.5.1 injection"
+                                                            foreach ($UpdatesDUCUFilePath in $UpdatesDUCUFilePaths) {
+                                                                Write-Verbose -Message " - Currently processing: $($UpdatesDUCUFilePath)"
+                                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($UpdatesDUCUFilePath)"""
+                                                                if ($ReturnValue -ne 0) {
+                                                                    Write-Warning -Message "Failed to re-apply required patch in OS image for: $($UpdatesDUCUFilePath)"
+                                                                }
                                                             }
                                                         }
+                                                        else {
+                                                            Write-Verbose -Message " - Skipping Dynamic Updates (DUCU) updates due to missing update files in sub-folder"
+                                                        }
                                                     }
-                                                    else {
-                                                        Write-Verbose -Message " - Skipping Dynamic Updates (DUCU) updates due to missing update files in sub-folder"
-                                                    }
+                                                }
+                                                else {
+                                                    Write-Warning -Message "Failed to re-apply the Cumulative Update patch to OS image"
                                                 }
                                             }
                                             else {
-                                                Write-Warning -Message "Failed to re-apply the Cumulative Update patch to OS image"
+                                                Write-Warning -Message "Failed to apply .NET Framework 3.5.1 in OS image"
                                             }
                                         }
-                                        else {
-                                            Write-Warning -Message "Failed to apply .NET Framework 3.5.1 in OS image"
-                                        }
-                                    }
 
-                                    if ($PSBoundParameters["RemoveAppxPackages"]) {
-                                        Write-Verbose -Message " - Remove appx provisioned packages parameter was specified"
-
-                                        try {
-                                            # Retrieve existing appx provisioned apps in the mounted OS image
-                                            Write-Verbose -Message " - Attempting to retrieve provisioned appx packages in OS image"
-                                            $AppxProvisionedPackagesList = Get-AppxProvisionedPackage -Path $MountPathOSImage -ErrorAction Stop
+                                        if ($PSBoundParameters["RemoveAppxPackages"]) {
+                                            Write-Verbose -Message " - Remove appx provisioned packages parameter was specified"
 
                                             try {
+                                                # Retrieve existing appx provisioned apps in the mounted OS image
+                                                Write-Verbose -Message " - Attempting to retrieve provisioned appx packages in OS image"
+                                                $AppxProvisionedPackagesList = Get-AppxProvisionedPackage -Path $MountPathOSImage -ErrorAction Stop
+
                                                 # Loop through the list of provisioned appx packages
                                                 foreach ($App in $AppxProvisionedPackagesList) {
                                                     # Remove provisioned appx package if name not in white list
@@ -868,200 +928,205 @@ Process {
                                                         Write-Verbose -Message " - Skipping excluded provisioned appx package: $($App.DisplayName)"
                                                     }
                                                     else {
-                                                        # Attempt to remove AppxProvisioningPackage
-                                                        Write-Verbose -Message " - Attempting to remove provisioned appx package from OS image: $($App.DisplayName)"
-                                                        Remove-AppxProvisionedPackage -PackageName $App.DisplayName -Path $MountPathOSImage -ErrorAction Stop | Out-Null
+                                                        try {
+                                                            # Attempt to remove AppxProvisioningPackage
+                                                            Write-Verbose -Message " - Attempting to remove provisioned appx package from OS image: $($App.PackageName)"
+                                                            Remove-AppxProvisionedPackage -PackageName $App.PackageName -Path $MountPathOSImage -ErrorAction Stop -Verbose:$false | Out-Null
+                                                        }
+                                                        catch [System.Exception] {
+                                                            Write-Verbose -Message "Failed to remove provisioned appx package '$($App.DisplayName)' in OS image. Error message: $($_.Exception.Message)"
+                                                        }
                                                     }
                                                 }
                                             }
                                             catch [System.Exception] {
-                                                Write-Verbose -Message "Failed to remove provisioned appx package '$($App.DisplayName)' in OS image. Error message: $($_.Exception.Message)"
+                                                Write-Verbose -Message "Failed to retrieve provisioned appx package in OS image. Error message: $($_.Exception.Message)"
                                             }
                                         }
-                                        catch [System.Exception] {
-                                            Write-Verbose -Message "Failed to retrieve provisioned appx package in OS image. Error message: $($_.Exception.Message)"
-                                        }
-                                    }
 
-                                    Write-Verbose -Message "[OSImage]: Successfully completed phase"
-                                    Write-Verbose -Message "[WinREImage]: Initiating WinRE image servicing phase"
+                                        Write-Verbose -Message "[OSImage]: Successfully completed phase"
+                                        Write-Verbose -Message "[WinREImage]: Initiating WinRE image servicing phase"
 
-                                    try {
-                                        # Move WinRE image from mounted OS image to a temporary location
-                                        $OSImageWinRETemp = Join-Path -Path $ImagePathTemp -ChildPath "winre_temp.wim"
-                                        Write-Verbose -Message " - Attempting to move winre.wim file from mounted OS image to temporary location: $($OSImageWinRETemp)"
-                                        Move-Item -Path (Join-Path -Path $MountPathOSImage -ChildPath "\Windows\System32\Recovery\winre.wim") -Destination $OSImageWinRETemp -ErrorAction Stop | Out-Null
-    
                                         try {
-                                            # Mount the WinRE temporary image
-                                            Write-Verbose -Message " - Attempting to mount temporary winre_temp.wim file from: $($OSImageWinRETemp)"
-                                            Mount-WindowsImage -ImagePath $OSImageWinRETemp -Path $MountPathWinRE -Index 1 -ErrorAction Stop | Out-Null
-                                            
-                                            # Attempt to apply required updates for WinRE image: Service Stack Update
-                                            Write-Verbose -Message " - Attempting to apply required patch in temporary WinRE image for: Service Stack Update"
-                                            Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
-                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
-                                            
-                                            if ($ReturnValue -eq 0) {
-                                                # Attempt to apply required updates for WinRE image: Cumulative Update
-                                                Write-Verbose -Message " - Attempting to apply required patch in temporary WinRE image for: Cumulative Update"
-                                                Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
-                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
+                                            # Move WinRE image from mounted OS image to a temporary location
+                                            $OSImageWinRETemp = Join-Path -Path $ImagePathTemp -ChildPath "winre_temp.wim"
+                                            Write-Verbose -Message " - Attempting to move winre.wim file from mounted OS image to temporary location: $($OSImageWinRETemp)"
+                                            Move-Item -Path (Join-Path -Path $MountPathOSImage -ChildPath "\Windows\System32\Recovery\winre.wim") -Destination $OSImageWinRETemp -ErrorAction Stop | Out-Null
+
+                                            try {
+                                                # Mount the WinRE temporary image
+                                                Write-Verbose -Message " - Attempting to mount temporary winre_temp.wim file from: $($OSImageWinRETemp)"
+                                                Mount-WindowsImage -ImagePath $OSImageWinRETemp -Path $MountPathWinRE -Index 1 -ErrorAction Stop | Out-Null
+                                                
+                                                # Attempt to apply required updates for WinRE image: Service Stack Update
+                                                Write-Verbose -Message " - Attempting to apply required patch in temporary WinRE image for: Service Stack Update"
+                                                Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
+                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
                                                 
                                                 if ($ReturnValue -eq 0) {
-                                                    # Cleanup WinRE image
-                                                    Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of temporary WinRE image, this operation could take some time"
-                                                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Cleanup-Image /StartComponentCleanup /ResetBase"
-    
+                                                    # Attempt to apply required updates for WinRE image: Cumulative Update
+                                                    Write-Verbose -Message " - Attempting to apply required patch in temporary WinRE image for: Cumulative Update"
+                                                    Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
+                                                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
+                                                    
                                                     if ($ReturnValue -eq 0) {
-                                                        try {
-                                                            # Dismount the WinRE image
-                                                            Write-Verbose -Message " - Attempting to dismount and save changes made to temporary WinRE image"
-                                                            Dismount-WindowsImage -Path $MountPathWinRE -Save -ErrorAction Stop | Out-Null
-    
-                                                            try {
-                                                                # Move temporary WinRE to back to original source location in OS image
-                                                                Write-Verbose -Message " - Attempting to export temporary WinRE image to mounted OS image location"
-                                                                Export-WindowsImage -SourceImagePath $OSImageWinRETemp -DestinationImagePath (Join-Path -Path $MountPathOSImage -ChildPath "Windows\System32\Recovery\winre.wim") -SourceName "Microsoft Windows Recovery Environment (x64)" -ErrorAction Stop | Out-Null
+                                                        # Cleanup WinRE image
+                                                        Write-Verbose -Message " - Attempting to perform a component cleanup and reset base of temporary WinRE image, this operation could take some time"
+                                                        $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathWinRE)"" /Cleanup-Image /StartComponentCleanup /ResetBase"
 
-                                                                Write-Verbose -Message "[WinREImage]: Successfully completed phase"
-                                                                Write-Verbose -Message "[OSImageExport]: Initiating OS image export servicing phase"
+                                                        if ($ReturnValue -eq 0) {
+                                                            try {
+                                                                # Dismount the WinRE image
+                                                                Write-Verbose -Message " - Attempting to dismount and save changes made to temporary WinRE image"
+                                                                Dismount-WindowsImage -Path $MountPathWinRE -Save -ErrorAction Stop | Out-Null
 
                                                                 try {
-                                                                    # Dismount the OS image
-                                                                    Write-Verbose -Message " - Attempting to dismount the OS image"
-                                                                    Dismount-WindowsImage -Path $MountPathOSImage -Save -ErrorAction Stop | Out-Null
-    
+                                                                    # Move temporary WinRE to back to original source location in OS image
+                                                                    Write-Verbose -Message " - Attempting to export temporary WinRE image to mounted OS image location"
+                                                                    Export-WindowsImage -SourceImagePath $OSImageWinRETemp -DestinationImagePath (Join-Path -Path $MountPathOSImage -ChildPath "Windows\System32\Recovery\winre.wim") -SourceName "Microsoft Windows Recovery Environment (x64)" -ErrorAction Stop | Out-Null
+
+                                                                    Write-Verbose -Message "[WinREImage]: Successfully completed phase"
+                                                                    Write-Verbose -Message "[OSImageExport]: Initiating OS image export servicing phase"
+
                                                                     try {
-                                                                        # Export OS image to temporary location
-                                                                        $NewOSImageWim = Join-Path -Path $ImagePathTemp -ChildPath "install.wim"
-                                                                        Write-Verbose -Message " - Attempting to export OS edition Windows 10 $($OSEdition) to temporary location from file: $($OSImageTempWim)"
-                                                                        Export-WindowsImage -SourceImagePath $OSImageTempWim -DestinationImagePath $NewOSImageWim -SourceName "Windows 10 $($OSEdition)" -ErrorAction Stop | Out-Null
-    
+                                                                        # Dismount the OS image
+                                                                        Write-Verbose -Message " - Attempting to dismount the OS image"
+                                                                        Dismount-WindowsImage -Path $MountPathOSImage -Save -ErrorAction Stop | Out-Null
+
                                                                         try {
-                                                                            # Remove install.wim from OS media source file location
-                                                                            Write-Verbose -Message " - Attempting to remove install.wim from OS media source file location"
-                                                                            Remove-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Force -ErrorAction Stop
+                                                                            # Export OS image to temporary location
+                                                                            $NewOSImageWim = Join-Path -Path $ImagePathTemp -ChildPath "install.wim"
+                                                                            Write-Verbose -Message " - Attempting to export OS edition Windows 10 $($OSEdition) to temporary location from file: $($OSImageTempWim)"
+                                                                            Export-WindowsImage -SourceImagePath $OSImageTempWim -DestinationImagePath $NewOSImageWim -SourceName "Windows 10 $($OSEdition)" -ErrorAction Stop | Out-Null
 
                                                                             try {
-                                                                                # Replace serviced OS image wim file with existing wim file
-                                                                                Write-Verbose -Message " - Attempting to replace serviced install.wim from temporary location to OS media source files location"
-                                                                                Move-Item -Path $NewOSImageWim -Destination (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Force -ErrorAction Stop
-    
-                                                                                Write-Verbose -Message "[OSImageExport]: Successfully completed phase"
-                                                                                Write-Verbose -Message "[BootImage]: Initiating boot image servicing phase"
+                                                                                # Remove install.wim from OS media source file location
+                                                                                Write-Verbose -Message " - Attempting to remove install.wim from OS media source file location"
+                                                                                Remove-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Force -ErrorAction Stop
 
                                                                                 try {
-                                                                                    # Copy boot.wim from OS media source location to temporary location
-                                                                                    $OSBootWim = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim"
-                                                                                    $OSBootWimTemp = Join-Path -Path $ImagePathTemp -ChildPath "boot_temp.wim"
-                                                                                    Write-Verbose -Message " - Attempting to copy boot.wim file from OS media source files location to temporary location: $($OSBootWimTemp)"
-                                                                                    Copy-Item -Path $OSBootWim -Destination $OSBootWimTemp -ErrorAction Stop
+                                                                                    # Replace serviced OS image wim file with existing wim file
+                                                                                    Write-Verbose -Message " - Attempting to replace serviced install.wim from temporary location to OS media source files location"
+                                                                                    Move-Item -Path $NewOSImageWim -Destination (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Force -ErrorAction Stop
+
+                                                                                    Write-Verbose -Message "[OSImageExport]: Successfully completed phase"
+                                                                                    Write-Verbose -Message "[BootImage]: Initiating boot image servicing phase"
 
                                                                                     try {
-                                                                                        # Remove the read-only attribute on the temporary boot.wim file
-                                                                                        Write-Verbose -Message " - Attempting to remove read-only attribute from boot_temp.wim file"
-                                                                                        Set-ItemProperty -Path $OSBootWimTemp -Name "IsReadOnly" -Value $false -ErrorAction Stop
+                                                                                        # Copy boot.wim from OS media source location to temporary location
+                                                                                        $OSBootWim = Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim"
+                                                                                        $OSBootWimTemp = Join-Path -Path $ImagePathTemp -ChildPath "boot_temp.wim"
+                                                                                        Write-Verbose -Message " - Attempting to copy boot.wim file from OS media source files location to temporary location: $($OSBootWimTemp)"
+                                                                                        Copy-Item -Path $OSBootWim -Destination $OSBootWimTemp -ErrorAction Stop
 
                                                                                         try {
-                                                                                            # Mount temporary boot image file
-                                                                                            Write-Verbose -Message " - Attempting to mount temporary boot image file"
-                                                                                            Mount-WindowsImage -ImagePath $OSBootWimTemp -Index 2 -Path $MountPathBootImage -ErrorAction Stop | Out-Null
+                                                                                            # Remove the read-only attribute on the temporary boot.wim file
+                                                                                            Write-Verbose -Message " - Attempting to remove read-only attribute from boot_temp.wim file"
+                                                                                            Set-ItemProperty -Path $OSBootWimTemp -Name "IsReadOnly" -Value $false -ErrorAction Stop
 
-                                                                                            # Attempt to apply required updates for boot image: Service Stack Update
-                                                                                            Write-Verbose -Message " - Attempting to apply required patch in temporary boot image for: Service Stack Update"
-                                                                                            Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
-                                                                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathBootImage)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
+                                                                                            try {
+                                                                                                # Mount temporary boot image file
+                                                                                                Write-Verbose -Message " - Attempting to mount temporary boot image file"
+                                                                                                Mount-WindowsImage -ImagePath $OSBootWimTemp -Index 2 -Path $MountPathBootImage -ErrorAction Stop | Out-Null
 
-                                                                                            if ($ReturnValue -eq 0) {
-                                                                                                # Attempt to apply required updates for boot image: Cumulative Update
-                                                                                                Write-Verbose -Message " - Attempting to apply required patch in temporary boot image for: Cumulative Update"
-                                                                                                Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
-                                                                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathBootImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
+                                                                                                # Attempt to apply required updates for boot image: Service Stack Update
+                                                                                                Write-Verbose -Message " - Attempting to apply required patch in temporary boot image for: Service Stack Update"
+                                                                                                Write-Verbose -Message " - Currently processing: $($ServiceStackUpdateFilePath)"
+                                                                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathBootImage)"" /Add-Package /PackagePath:""$($ServiceStackUpdateFilePath)"""
 
                                                                                                 if ($ReturnValue -eq 0) {
-                                                                                                    try {
-                                                                                                        # Dismount the temporary boot image
-                                                                                                        Write-Verbose -Message " - Attempting to dismount temporary boot image"
-                                                                                                        Dismount-WindowsImage -Path $MountPathBootImage -Save -ErrorAction Stop | Out-Null
+                                                                                                    # Attempt to apply required updates for boot image: Cumulative Update
+                                                                                                    Write-Verbose -Message " - Attempting to apply required patch in temporary boot image for: Cumulative Update"
+                                                                                                    Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
+                                                                                                    $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathBootImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
 
-                                                                                                        Write-Verbose -Message "[BootImage]: Successfully completed phase"
-                                                                                                        Write-Verbose -Message "[BootImageExport]: Initiating boot image export servicing phase"
-                                                                                                        
+                                                                                                    if ($ReturnValue -eq 0) {
                                                                                                         try {
-                                                                                                            # Remove boot.wim from OS media source file location
-                                                                                                            Write-Verbose -Message " - Attempting to remove boot.wim from OS media source files location"
-                                                                                                            Remove-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Force -ErrorAction Stop
+                                                                                                            # Dismount the temporary boot image
+                                                                                                            Write-Verbose -Message " - Attempting to dismount temporary boot image"
+                                                                                                            Dismount-WindowsImage -Path $MountPathBootImage -Save -ErrorAction Stop | Out-Null
 
+                                                                                                            Write-Verbose -Message "[BootImage]: Successfully completed phase"
+                                                                                                            Write-Verbose -Message "[BootImageExport]: Initiating boot image export servicing phase"
+                                                                                                            
                                                                                                             try {
-                                                                                                                # Replace serviced boot image wim file with existing wim file
-                                                                                                                Write-Verbose -Message " - Attempting to move temporary boot image file to OS media source files location"
-                                                                                                                Move-Item -Path $OSBootWimTemp -Destination (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Force -ErrorAction Stop
+                                                                                                                # Remove boot.wim from OS media source file location
+                                                                                                                Write-Verbose -Message " - Attempting to remove boot.wim from OS media source files location"
+                                                                                                                Remove-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Force -ErrorAction Stop
 
-                                                                                                                Write-Verbose -Message "[BootImageExport]: Successfully completed phase"
+                                                                                                                try {
+                                                                                                                    # Replace serviced boot image wim file with existing wim file
+                                                                                                                    Write-Verbose -Message " - Attempting to move temporary boot image file to OS media source files location"
+                                                                                                                    Move-Item -Path $OSBootWimTemp -Destination (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Force -ErrorAction Stop
 
-                                                                                                                if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
-                                                                                                                    try {
-                                                                                                                        Write-Verbose -Message "[OSImageFinal]: Initiating OS image final servicing phase"
-                                                                                                                        Write-Verbose -Message " - Attempting to copy Dynamic Updates setup update files into OS media source file location"
-                                                                                                                        $OSMediaSourcesPath = Join-Path -Path $OSMediaFilesPath -ChildPath "sources"
-                                                                                                                        $UpdateDUSUExtractedFolders = Get-ChildItem -Path $DUSUExtractPath -Directory -ErrorAction Stop
-                                                                                                                        foreach ($UpdateDUSUExtractedFolder in $UpdateDUSUExtractedFolders) {
-                                                                                                                            Write-Verbose -Message " - Currently processing folder: $($UpdateDUSUExtractedFolder.FullName)"
-                                                                                                                            Copy-Item -Path "$($UpdateDUSUExtractedFolder.FullName)\*" -Destination $OSMediaSourcesPath -Container -Force -Recurse -ErrorAction Stop
+                                                                                                                    Write-Verbose -Message "[BootImageExport]: Successfully completed phase"
+
+                                                                                                                    if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
+                                                                                                                        try {
+                                                                                                                            Write-Verbose -Message "[OSImageFinal]: Initiating OS image final servicing phase"
+                                                                                                                            Write-Verbose -Message " - Attempting to copy Dynamic Updates setup update files into OS media source file location"
+                                                                                                                            $OSMediaSourcesPath = Join-Path -Path $OSMediaFilesPath -ChildPath "sources"
+                                                                                                                            $UpdateDUSUExtractedFolders = Get-ChildItem -Path $DUSUExtractPath -Directory -ErrorAction Stop
+                                                                                                                            foreach ($UpdateDUSUExtractedFolder in $UpdateDUSUExtractedFolders) {
+                                                                                                                                Write-Verbose -Message " - Currently processing folder: $($UpdateDUSUExtractedFolder.FullName)"
+                                                                                                                                Copy-Item -Path "$($UpdateDUSUExtractedFolder.FullName)\*" -Destination $OSMediaSourcesPath -Container -Force -Recurse -ErrorAction Stop
+                                                                                                                            }
+                                                                                                                            Write-Verbose -Message "[OSImageFinal]: Successfully completed phase"
                                                                                                                         }
-                                                                                                                        Write-Verbose -Message "[OSImageFinal]: Successfully completed phase"
+                                                                                                                        catch [System.Exception] {
+                                                                                                                            Write-Warning -Message "Failed to copy Dynamic Updates setup update files into OS media source files. Error message: $($_.Exception.Message)"
+                                                                                                                        }
                                                                                                                     }
-                                                                                                                    catch [System.Exception] {
-                                                                                                                        Write-Warning -Message "Failed to copy Dynamic Updates setup update files into OS media source files. Error message: $($_.Exception.Message)"
-                                                                                                                    }
-                                                                                                                }
 
-                                                                                                                # Set Windows image servicing completed variable
-                                                                                                                $WindowsImageServicingCompleted = $true
+                                                                                                                    # Set Windows image servicing completed variable
+                                                                                                                    $WindowsImageServicingCompleted = $true
+                                                                                                                }
+                                                                                                                catch [System.Exception] {
+                                                                                                                    Write-Warning -Message "Failed to move boot.wim from temporary location to OS media source files location. Error message: $($_.Exception.Message)"
+                                                                                                                }
                                                                                                             }
                                                                                                             catch [System.Exception] {
-                                                                                                                Write-Warning -Message "Failed to move boot.wim from temporary location to OS media source files location. Error message: $($_.Exception.Message)"
+                                                                                                                Write-Warning -Message "Failed to remove boot.wim from OS media source files location. Error message: $($_.Exception.Message)"
                                                                                                             }
                                                                                                         }
                                                                                                         catch [System.Exception] {
-                                                                                                            Write-Warning -Message "Failed to remove boot.wim from OS media source files location. Error message: $($_.Exception.Message)"
+                                                                                                            Write-Warning -Message "Failed to dismount the temporary boot image. Error message: $($_.Exception.Message)"
                                                                                                         }
                                                                                                     }
-                                                                                                    catch [System.Exception] {
-                                                                                                        Write-Warning -Message "Failed to dismount the temporary boot image. Error message: $($_.Exception.Message)"
+                                                                                                    else {
+                                                                                                        Write-Warning -Message "Failed to apply the Cumulative Update patch to boot image"
                                                                                                     }
                                                                                                 }
                                                                                                 else {
-                                                                                                    Write-Warning -Message "Failed to apply the Cumulative Update patch to boot image"
+                                                                                                    Write-Warning -Message "Failed to apply the Service Stack Update to boot image"
                                                                                                 }
                                                                                             }
-                                                                                            else {
-                                                                                                Write-Warning -Message "Failed to apply the Service Stack Update to boot image"
+                                                                                            catch [System.Exception] {
+                                                                                                Write-Warning -Message "Failed to mount the temporary boot image. Error message: $($_.Exception.Message)"
                                                                                             }
                                                                                         }
                                                                                         catch [System.Exception] {
-                                                                                            Write-Warning -Message "Failed to mount the temporary boot image. Error message: $($_.Exception.Message)"
+                                                                                            Write-Warning -Message "Failed to remove read-only attribute from temporary boot.wim file. Error message: $($_.Exception.Message)"
                                                                                         }
                                                                                     }
                                                                                     catch [System.Exception] {
-                                                                                        Write-Warning -Message "Failed to remove read-only attribute from temporary boot.wim file. Error message: $($_.Exception.Message)"
+                                                                                        Write-Warning -Message "Failed to copy boot.wim from OS media source files location to temporary location. Error message: $($_.Exception.Message)"
                                                                                     }
                                                                                 }
                                                                                 catch [System.Exception] {
-                                                                                    Write-Warning -Message "Failed to copy boot.wim from OS media source files location to temporary location. Error message: $($_.Exception.Message)"
+                                                                                    Write-Warning -Message "Failed to move install.wim from temporary location to OS media source files location. Error message: $($_.Exception.Message)"
                                                                                 }
                                                                             }
                                                                             catch [System.Exception] {
-                                                                                Write-Warning -Message "Failed to move install.wim from temporary location to OS media source files location. Error message: $($_.Exception.Message)"
+                                                                                Write-Warning -Message "Failed to remove install.wim from OS media source files location. Error message: $($_.Exception.Message)"
                                                                             }
                                                                         }
                                                                         catch [System.Exception] {
-                                                                            Write-Warning -Message "Failed to remove install.wim from OS media source files location. Error message: $($_.Exception.Message)"
+                                                                            Write-Warning -Message "Failed to export OS image into temporary location. Error message: $($_.Exception.Message)"
                                                                         }
                                                                     }
                                                                     catch [System.Exception] {
-                                                                        Write-Warning -Message "Failed to export OS image into temporary location. Error message: $($_.Exception.Message)"
+                                                                        Write-Warning -Message "Failed to export WinRE image into OS image. Error message: $($_.Exception.Message)"
                                                                     }
                                                                 }
                                                                 catch [System.Exception] {
@@ -1069,39 +1134,39 @@ Process {
                                                                 }
                                                             }
                                                             catch [System.Exception] {
-                                                                Write-Warning -Message "Failed to export WinRE image into OS image. Error message: $($_.Exception.Message)"
+                                                                Write-Warning -Message "Failed to dismount WinRE image. Error message: $($_.Exception.Message)"
                                                             }
                                                         }
-                                                        catch [System.Exception] {
-                                                            Write-Warning -Message "Failed to dismount WinRE image. Error message: $($_.Exception.Message)"
+                                                        else {
+                                                            Write-Warning -Message "Failed to perform cleanup operation of WinRE image"
                                                         }
                                                     }
                                                     else {
-                                                        Write-Warning -Message "Failed to perform cleanup operation of WinRE image"
+                                                        Write-Warning -Message "Failed to apply the Cumulative Update to WinRE image"
                                                     }
                                                 }
                                                 else {
-                                                    Write-Warning -Message "Failed to apply the Cumulative Update to WinRE image"
+                                                    Write-Warning -Message "Failed to apply the Service Stack Update to WinRE image"
                                                 }
                                             }
-                                            else {
-                                                Write-Warning -Message "Failed to apply the Service Stack Update to WinRE image"
-                                            }
+                                            catch [System.Exception] {
+                                                Write-Warning -Message "Failed to mount WinRE image. Error message: $($_.Exception.Message)"
+                                            }                                            
                                         }
                                         catch [System.Exception] {
-                                            Write-Warning -Message "Failed to mount WinRE image. Error message: $($_.Exception.Message)"
-                                        }                                            
+                                            Write-Warning -Message "Failed to move WinRE image from mounted OS image to temporary location. Error message: $($_.Exception.Message)"
+                                        }                                
                                     }
-                                    catch [System.Exception] {
-                                        Write-Warning -Message "Failed to move WinRE image from mounted OS image to temporary location. Error message: $($_.Exception.Message)"
-                                    }                                
+                                    else {
+                                        Write-Warning -Message "Failed to perform cleanup operation of OS image"
+                                    }                          
                                 }
                                 else {
-                                    Write-Warning -Message "Failed to perform cleanup operation of OS image"
-                                }                          
+                                    Write-Warning -Message "Failed to apply the Other patch to OS image"
+                                }
                             }
                             else {
-                                Write-Warning -Message "Failed to apply the Other patch to OS image"
+                                Write-Warning -Message "Failed to apply the .NET Framework Cumulative Update patches to OS image"
                             }
                         }
                         else {
