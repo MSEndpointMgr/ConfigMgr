@@ -17,12 +17,13 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2019-03-10
-    Updated:     2019-08-13
+    Updated:     2019-10-03
 
     Version history:
     1.0.0 - (2019-03-10) Initial script updated with help section and a fix for randomly freezing
     1.1.0 - (2019-05-03) Added support for Windows 10 version 1903 (19H1)
     1.1.1 - (2019-08-13) Removed the part where it was disabling/enabling configuration for Store updates, as it's not needed
+    1.1.2 - (2019-10-03) Removed unnecessary left over functions and updated catch statements so that they actually log the current app that could not be removed
 #>
 Begin {
     # White list of Features On Demand V2 packages
@@ -77,68 +78,7 @@ Process {
             Out-File -InputObject $Value -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
         }
         catch [System.Exception] {
-            Write-Warning -Message "Unable to append log entry to RemovedApps.log file"
-        }
-    }
-
-    function Test-RegistryValue {
-        param(
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Path,
-    
-            [parameter(Mandatory=$false)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name
-        )
-        # If item property value exists return True, else catch the failure and return False
-        try {
-            if ($PSBoundParameters["Name"]) {
-                $Existence = Get-ItemProperty -Path $Path | Select-Object -ExpandProperty $Name -ErrorAction Stop
-            }
-            else {
-                $Existence = Get-ItemProperty -Path $Path -ErrorAction Stop
-            }
-            
-            if ($Existence -ne $null) {
-                return $true
-            }
-        }
-        catch [System.Exception] {
-            return $false
-        }
-    }    
-
-    function Set-RegistryValue {
-        param(
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Path,
-
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Value,
-
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [ValidateSet("DWORD", "String")]
-            [string]$Type
-        )
-        try {
-            $RegistryValue = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
-            if ($RegistryValue -ne $null) {
-                Set-ItemProperty -Path $Path -Name $Name -Value $Value -Force -ErrorAction Stop
-            }
-            else {
-                New-ItemProperty -Path $Path -Name $Name -PropertyType $Type -Value $Value -Force -ErrorAction Stop | Out-Null
-            }
-        }
-        catch [System.Exception] {
-            Write-Warning -Message "Failed to create or update registry value '$($Name)' in '$($Path)'. Error message: $($_.Exception.Message)"
+            Write-Warning -Message "Unable to append log entry to $($FileName) file"
         }
     }
 
@@ -172,7 +112,7 @@ Process {
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxPackage: $($AppPackageFullName)"
+                Write-LogEntry -Value "Unable to locate AppxPackage for current app: $($App)"
             }
 
             # Attempt to remove AppxProvisioningPackage
@@ -186,7 +126,7 @@ Process {
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
+                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage for current app: $($App)"
             }
         }
     }
