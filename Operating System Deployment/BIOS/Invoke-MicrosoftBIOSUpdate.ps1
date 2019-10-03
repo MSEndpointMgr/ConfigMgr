@@ -77,14 +77,14 @@ Process {
         $Context = $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 
         # Construct final log entry
-        $LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""DellBIOSUpdate.log"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
+        $LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""MicrosoftBIOSUpdate.log"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
 	
 	    # Add value to log file
         try {
 	        Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop 
         }
         catch [System.Exception] {
-            Write-Warning -Message "Unable to append log entry to Invoke-DellBIOSUpdate.log file. Error message: $($_.Exception.Message)"
+            Write-Warning -Message "Unable to append log entry to Invoke-MicrosoftBIOSUpdate.log file. Error message: $($_.Exception.Message)"
         }
     }
 	
