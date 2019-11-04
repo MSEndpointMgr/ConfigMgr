@@ -407,10 +407,16 @@ Process {
 									OSVersion  = $OSImage.Version
 									OSArchitecture = $OSImage.Architecture
 								}
-
-								# Handle return value
-								return $PSObject
 							}
+						}
+						
+						# Test if the PSCustomObject is filled
+						if ($null -eq $PsObject) {
+							Write-CMLogEntry -Value "The provided package id '$($OSImageTsVariableValue)' from the task sequence variable '$($OSImageTSVariableName)' does not belong to a valid operating system image package." -Severity 3
+							exit 4
+						} else {
+							# Handle return value
+							return $PSObject
 						}
 					}
 					else {
