@@ -77,6 +77,9 @@
 .PARAMETER RemoveAppxPackages
     Remove built-in provisioned appx packages when servicing the OS image.
 
+.PARAMETER SkipBackup
+    Skip the complete backup of OS media source files before servicing is executed.
+
 .EXAMPLE
     # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player:
     .\Invoke-WindowsImageOfflineServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64
@@ -102,7 +105,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2019-11-15
+    Updated:     2019-11-28
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -123,6 +126,8 @@
     1.1.2 - (2019-10-01) Fixed an issue where Cumulative Updates download process would attempt to retrieve the .NET Framework Cumulative Update instead of the one for Windows 10.
     1.1.3 - (2019-10-02) Fixed an issue where the Invoke-MSUpdateItemDownload function would not download multiple ContentIDs when available (e.g. for .NET Framework updates).
     1.1.4 - (2019-11-15) Added support for adding Local Experience Packs (language packs) to the image that's being served in addition to setting the desired default UI language.
+    1.1.5 - (2019-11-28) Added SkipBackup parameter to not perform backup steps. Improved execution logic to skip .NET Framework and Adobe Flash Player updates if they're not currently available for the 
+                         Windows 10 version that's being serviced.
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -172,7 +177,7 @@ param(
     [parameter(Mandatory=$true, ParameterSetName="DynamicUpdates")]
     [parameter(Mandatory=$true, ParameterSetName="LanguagePack")]
     [ValidateNotNullOrEmpty()]
-    [ValidateSet("1703", "1709", "1803", "1809", "1903", "1909", "2003", "2009", "2103", "2109")]
+    [ValidateSet("1703", "1709", "1803", "1809", "1903", "1909", "2004", "2009", "2103", "2109")]
     [string]$OSVersion,
 
     [parameter(Mandatory=$true, ParameterSetName="ImageServicing", HelpMessage="Specify the operating system architecture being serviced.")]
@@ -224,7 +229,12 @@ param(
     [parameter(Mandatory=$false, ParameterSetName="ImageServicing", HelpMessage="Remove built-in provisioned appx packages when servicing the OS image.")]
     [parameter(Mandatory=$false, ParameterSetName="DynamicUpdates")]
     [parameter(Mandatory=$false, ParameterSetName="LanguagePack")]
-    [switch]$RemoveAppxPackages
+    [switch]$RemoveAppxPackages,
+
+    [parameter(Mandatory=$false, ParameterSetName="ImageServicing", HelpMessage="Skip the complete backup of OS media source files before servicing is executed.")]
+    [parameter(Mandatory=$false, ParameterSetName="DynamicUpdates")]
+    [parameter(Mandatory=$false, ParameterSetName="LanguagePack")]
+    [switch]$SkipBackup    
 )
 Begin {
     Write-Verbose -Message "[Environment]: Initiating environment requirements phase"
@@ -426,6 +436,8 @@ Process {
     $ProgressPreference = "SilentlyContinue"
 
     # Define default values for skip variables
+    $SkipNETFrameworkUpdate = $false
+    $SkipAdobeFlashPlayerUpdate = $false
     $SkipDUCUPatch = $false
     $SkipDUSUPatch = $false
     $SkipLanguagePack = $false
@@ -460,6 +472,7 @@ Process {
     $MountPathRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "Mount"
     $UpdateFilesRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "Updates"
     $LPFilesRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "LanguagePack"
+    $BackupPathRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "Backup"
 
     # Verify that Dynamic Update product is enabled in Software Update point
     if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
@@ -495,6 +508,12 @@ Process {
     if (-not(Test-Path -Path $MountPathRoot)) {
         New-Item -Path $OSMediaFilesRoot -Name "Mount" -ItemType Directory -Force | Out-Null
         Write-Verbose -Message " - Successfully created the Mount subfolder in: $($OSMediaFilesRoot)"
+    }
+
+    # Create Backup subfolder
+    if (-not(Test-Path -Path $BackupPathRoot)) {
+        New-Item -Path $OSMediaFilesRoot -Name "Backup" -ItemType Directory -Force | Out-Null
+        Write-Verbose -Message " - Successfully created the Backup subfolder in: $($OSMediaFilesRoot)"
     }
 
     # Create Language folder and subfolders
@@ -582,14 +601,29 @@ Process {
                 Write-Verbose -Message " - Successfully downloaded update item content file for update type: $($UpdateItemType)"
             }
             1 {
-                Write-Warning -Message " - Failed to downloaded update item content file for update type: $($UpdateItemType)"; exit
+                Write-Warning -Message " - Failed to download update item content file for update type: $($UpdateItemType)"; exit
             }
             2 {
-                if ($ServiceStackUpdateExists -eq $true) {
-                    Write-Verbose -Message " - Unable to download Servicing Stack Update content, but existing content file already exists"
-                }
-                else {
-                    Write-Warning -Message " - Failed to downloaded update item content file for update type: $($UpdateItemType)"; exit
+                switch ($UpdateItemType) {
+                    "Adobe Flash Player" {
+                        Write-Warning -Message " - Failed to locate update item content file for update type, will proceed and mark Adobe Flash Player for skiplist"
+                        $SkipAdobeFlashPlayerUpdate = $true
+                    }
+                    "Servicing Stack Update" {
+                        if ($ServiceStackUpdateExists -eq $true) {
+                            Write-Verbose -Message " - Unable to download Servicing Stack Update content, but existing content file already exists"
+                        }
+                        else {
+                            Write-Warning -Message " - Failed to download update item content file for update type: $($UpdateItemType)"; exit
+                        }
+                    }
+                    ".NET Framework" {
+                        Write-Warning -Message " - Failed to locate update item content file for update type, will proceed and mark .NET Framework for skiplist"
+                        $SkipNETFrameworkUpdate = $true
+                    }
+                    "Cumulative Update" {
+                        Write-Warning -Message " - Failed to download update item content file for update type: $($UpdateItemType)"; exit
+                    }
                 }
             }
         }
@@ -814,7 +848,7 @@ Process {
 
     # Validate updates root folder contains required .NET Framework Cumulative Update content cabinet file
     if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*NETFramework*.cab" | Measure-Object).Count -ge 1)) {
-        Write-Warning -Message "Unable to detect downloaded '.NET Framework Cumulative Update' content cabinet files, breaking operation"; break
+        Write-Verbose -Message " - Unable to detect downloaded '.NET Framework Cumulative Update' content cabinet files, proceeding with script operation"
     }
     else {
         # Determine .NET Framework Cumulative Update files to be applied
@@ -832,7 +866,7 @@ Process {
 
     # Validate updates root folder contains required Adobe Flash Player content cabinet file
     if (-not((Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter "*AdobeFlashPlayer*.cab" | Measure-Object).Count -ge 1)) {
-        Write-Warning -Message "Unable to detect downloaded 'Adobe Flash Player' content cabinet file, breaking operation"; break
+        Write-Verbose -Message " - Unable to detect downloaded 'Adobe Flash Player' content cabinet file, proceeding with script operation"
     }
     else {
         # Determine Adobe Flash Player file to be applied
@@ -975,23 +1009,14 @@ Process {
         try {
             Write-Verbose -Message "[Backup]: Initiating backup phase"
             
-            if ($PSCmdlet.ParameterSetName -like "DynamicUpdates") {
+            if (-not($PSBoundParameters["SkipBackup"])) {
                 # Backup complete set of OS media source files
-                $OSMediaFilesBackupPath = Join-Path -Path (Split-Path -Path $OSMediaFilesPath -Parent) -ChildPath "SourceBackup_$((Get-Date).ToString("yyyy-MM-dd"))"
+                $OSMediaFilesBackupPath = Join-Path -Path $BackupPathRoot -ChildPath "$((Get-Date).ToString("yyyy-MM-dd_HHmm"))-Source"
                 Write-Verbose -Message " - Backing up complete set of OS media source files into: $($OSMediaFilesBackupPath)"
                 Copy-Item -Path $OSMediaFilesPath -Destination $OSMediaFilesBackupPath -Container -Recurse -Force -ErrorAction Stop
             }
-
-            if ($PSCmdlet.ParameterSetName -like "ImageServicing") {
-                # Backup existing OS image install.wim file to temporary location
-                $OSImageTempBackupPath = (Join-Path -Path $ImagePathTemp -ChildPath "install_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak")
-                Write-Verbose -Message " - Backing up install.wim from OS media source files location: $($OSImageTempBackupPath)"
-                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\install.wim") -Destination $OSImageTempBackupPath -Force -ErrorAction Stop
-
-                # Backup existing OS image boot.wim file to temporary location
-                $BootImageTempBackupPath = (Join-Path -Path $ImagePathTemp -ChildPath "boot_$((Get-Date).ToString("yyyy-MM-dd")).wim.bak")
-                Write-Verbose -Message " - Backing up boot.wim from OS media source files location: $($BootImageTempBackupPath)"
-                Copy-Item -Path (Join-Path -Path $OSMediaFilesPath -ChildPath "sources\boot.wim") -Destination $BootImageTempBackupPath -Force -ErrorAction Stop
+            else {
+                Write-Verbose -Message " - Skipping backup of OS media source files since SkipBackup parameter was specified"
             }
 
             Write-Verbose -Message "[Backup]: Successfully completed phase"
@@ -1072,31 +1097,41 @@ Process {
                                 Write-Verbose -Message " - Attempting to apply required patch in OS image for: Cumulative Update"
                                 Write-Verbose -Message " - Currently processing: $($CumulativeUpdateFilePath)"
                                 $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($CumulativeUpdateFilePath)"""
+
                                 if ($ReturnValue -eq 0) {
-                                    # Attempt to apply required updates for OS image: .NET Framework Cumulative Updates
-                                    Write-Verbose -Message " - Attempting to apply required patch in OS image for: .NET Framework Cumulative Updates"
-                                    $NETFrameworkUpdatesCount = 0
-                                    foreach ($NETFrameworkUpdateFilePath in $NETFrameworkUpdateFilePaths) {
-                                        Write-Verbose -Message " - Currently processing: $($NETFrameworkUpdateFilePath)"
-                                        $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($NETFrameworkUpdateFilePath)"""
-    
-                                        if ($ReturnValue -ne 0) {
-                                            Write-Warning -Message "Failed to apply required patch in OS image for: $($NETFrameworkUpdateFilePath)"
+                                    if ($SkipNETFrameworkUpdate -eq $false) {
+                                        # Attempt to apply required updates for OS image: .NET Framework Cumulative Updates
+                                        Write-Verbose -Message " - Attempting to apply required patch in OS image for: .NET Framework Cumulative Updates"
+                                        $NETFrameworkUpdatesCount = 0
+                                        foreach ($NETFrameworkUpdateFilePath in $NETFrameworkUpdateFilePaths) {
+                                            Write-Verbose -Message " - Currently processing: $($NETFrameworkUpdateFilePath)"
+                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($NETFrameworkUpdateFilePath)"""
+        
+                                            if ($ReturnValue -ne 0) {
+                                                Write-Warning -Message "Failed to apply required patch in OS image for: $($NETFrameworkUpdateFilePath)"
+                                            }
+                                            else {
+                                                $NETFrameworkUpdatesCount++
+                                            }
                                         }
-                                        else {
-                                            $NETFrameworkUpdatesCount++
-                                        }
-                                    }                        
+                                    }
+                                    else {
+                                        $ReturnValue = 0
+                                        $NETFrameworkUpdatesCount = 0
+                                        $NETFrameworkUpdateFilePathsCount = 0
+                                    }
         
                                     if (($ReturnValue -eq 0) -and ($NETFrameworkUpdateFilePathsCount -eq $NETFrameworkUpdatesCount)) {
-                                        # Attempt to apply required updates for OS image: Other
-                                        Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
-                                        foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
-                                            Write-Verbose -Message " - Currently processing: $($OtherUpdateFilePath)"
-                                            $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($OtherUpdateFilePath)"""
-    
-                                            if ($ReturnValue -ne 0) {
-                                                Write-Warning -Message "Failed to apply required patch in OS image for: $($OtherUpdateFilePath)"
+                                        if ($SkipAdobeFlashPlayerUpdate -eq $false) {
+                                            # Attempt to apply required updates for OS image: Other
+                                            Write-Verbose -Message " - Attempting to apply '$(($OtherUpdateFilePaths | Measure-Object).Count)' required patches in OS image for: Other"
+                                            foreach ($OtherUpdateFilePath in $OtherUpdateFilePaths) {
+                                                Write-Verbose -Message " - Currently processing: $($OtherUpdateFilePath)"
+                                                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountPathOSImage)"" /Add-Package /PackagePath:""$($OtherUpdateFilePath)"""
+
+                                                if ($ReturnValue -ne 0) {
+                                                    Write-Warning -Message "Failed to apply required patch in OS image for: $($OtherUpdateFilePath)"
+                                                }
                                             }
                                         }
         
