@@ -1081,15 +1081,23 @@ Process {
                                             Write-Verbose -Message " - Skipping Language Pack LXPs due to missing content in servicing location"
                                         }
                                     }
+
+                                    # Determine if Language Pack and LXP injections was successfull
+                                    if ($LPPackageCount -eq ($LPBaseFilesRootItems | Measure-Object).Count) {
+                                        $ReturnValue = 0
+                                        if ($PSBoundParameters["IncludeLXP"]) {
+                                            if ($LPLXPPackageCount -eq $LPLXPAllowList.Count) {
+                                                $ReturnValue = 0
+                                            }
+                                            else {
+                                                $ReturnValue = 1
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        $ReturnValue = 1
+                                    }
                                 }
-                            }
-    
-                            # Determine if Language Pack and LXP injections was successfull
-                            if (($LPLXPPackageCount -eq $LPLXPAllowList.Count) -and ($LPPackageCount -eq ($LPBaseFilesRootItems | Measure-Object).Count)) {
-                                $ReturnValue = 0
-                            }
-                            else {
-                                $ReturnValue = 1
                             }
     
                             if ($ReturnValue -eq 0) {
