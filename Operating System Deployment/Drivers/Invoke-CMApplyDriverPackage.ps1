@@ -120,6 +120,7 @@
 	2.2.2 - (2019-05-14) Improved the Surface model detection from WMI
 	2.2.3 - (2019-05-14) Fixed an issue when multiple matching driver packages for a given model would only attempt to format the computer model name correctly for HP computers
 	2.2.4 - (2019-08-09) Fixed an issue on OperationalMode Production to filter out pilot and retired packages
+	2.2.5 - (2019-12-02) Added support for Windows 10 1903, 1909 and additional matching for Microsoft Surface devices (DAT 6.4.0 or neweer)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -486,6 +487,12 @@ Process {
 			"10.0*" {
 				$OSName = "Windows 10"
 				switch (([system.Version]$InputObject).Build) {
+					"18363" {
+						$OSVersion = 1909
+						}
+					"18362" {
+						$OSVersion = 1903
+						}
 					"17763" {
 						$OSVersion = 1809
 					}
@@ -550,7 +557,7 @@ Process {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
 			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			#$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
+			$SystemSKU = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"

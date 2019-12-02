@@ -59,6 +59,7 @@
 	2.1.1 - (2019-05-14) Updated the script to correctly handling computer models that contains '-' in the model name
 	2.1.2 - (2019-07-22) Updated to support Microsoft Surface devices
 	2.1.3 - (2019-11-25) Removed the OSUpgrade deployment type as it was not used within this script
+	2.1.4 - (2019-12-02) Updated Microsoft Surface logic as firmware will be contained within the driver package for new packages with DAT 6.4.0 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -404,7 +405,7 @@ Process {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
 			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			#$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
+			$SystemSKU = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
@@ -447,6 +448,10 @@ Process {
 	
 	# Call web service for a list of packages
 	try {
+		if ($ComputerManufacturer -match "Microsoft"){
+		$Filter = ($Filter.ToLower()).Replace("bios","drivers")
+		Write-CMLogEntry -Value "Replacing BIOS filter to Drivers for Microsoft models. The same package is used for both" -Severity 1
+		}
 		$Packages = $WebService.GetCMPackage($SecretKey, "$($Filter)")
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) BIOS packages from web service" -Severity 1
 	}
