@@ -121,6 +121,7 @@
 	2.2.3 - (2019-05-14) Fixed an issue when multiple matching driver packages for a given model would only attempt to format the computer model name correctly for HP computers
 	2.2.4 - (2019-08-09) Fixed an issue on OperationalMode Production to filter out pilot and retired packages
 	2.2.5 - (2019-12-02) Added support for Windows 10 1903, 1909 and additional matching for Microsoft Surface devices (DAT 6.4.0 or neweer)
+	2.2.6 - (2020-02-06) Fixed an issue where the single driver injection mode for BareMetal deployments would fail if there was a space in the driver inf name
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -176,7 +177,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.2.3"
+	$ScriptVersion = "2.2.6"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	if ($PSCmdLet.ParameterSetName -like "Execute") {
@@ -886,7 +887,7 @@ Process {
 																	foreach ($DriverINF in $DriverINFs) {
 																		# Install specific driver
 																		Write-CMLogEntry -Value "Attempting to install driver: $($DriverINF.FullName)" -Severity 1
-																		$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
+																		$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:`"$($DriverINF.FullName)`""
 																		
 																		# Validate driver injection
 																		if ($ApplyDriverInvocation -eq 0) {
