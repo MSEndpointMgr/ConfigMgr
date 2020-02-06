@@ -22,7 +22,7 @@
     Author:      Lauri Kurvinen / Nickolaj Andersen
     Contact:     @estmi / @NickolajA
     Created:     2017-09-05
-    Updated:     2019-05-14
+    Updated:     2020-02-06
 
     Version history:
 	1.0.0 - (2017-09-05) Script created
@@ -31,6 +31,7 @@
 	1.0.3 - (2019-04-30) Updated to support HPQFlash.exe and HPQFlash64.exe
 	1.0.4 - (2019-05-14) Handle $PasswordBin to check if empty string or null instead of just null value
 	1.0.5 - (2019-05-14) Fixed an issue where the flash utility would look in the script executing location instead of the passed $Path location for the update file
+	1.0.6 - (2020-02-06) Previous "fix" in 1.0.5 was a mistake, this version corrects it
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -100,7 +101,7 @@ Process {
 	
 	# Change working directory to path containing BIOS files	
 	Set-Location -Path $Path	
-	Write-CMLogEntry -Value "Work directory set as $($Path)" -Severity 1
+	Write-CMLogEntry -Value "Working directory set as $($Path)" -Severity 1
 
 	# Write log file for script execution	
 	Write-CMLogEntry -Value "Initiating script to determine flashing capabilities for HP BIOS updates" -Severity 1
@@ -159,7 +160,7 @@ Process {
 	
 	if (-not([System.String]::IsNullOrEmpty($PasswordBin))) {
 		# Add password to the flash bios switches
-		$FlashSwitches = $FlashSwitches + " -p$($Path)\$($PasswordBin)"	
+		$FlashSwitches = $FlashSwitches + " -p$($PSScriptRoot)\$($PasswordBin)"	
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
 	else {
