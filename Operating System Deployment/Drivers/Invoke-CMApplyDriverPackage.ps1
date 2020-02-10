@@ -39,7 +39,7 @@
 	Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.
 
 .PARAMETER TargetOSVersion
-	Define the value that will be used as the target operating system version e.g. 1909.
+	Define the value that will be used as the target operating system version e.g. 18363.
 
 .EXAMPLE
 	# Detect, download and apply drivers during OS deployment with ConfigMgr:
@@ -126,7 +126,8 @@
 	2.2.5 - (2019-12-02) Added support for Windows 10 1903, 1909 and additional matching for Microsoft Surface devices (DAT 6.4.0 or neweer)
 	2.2.6 - (2020-02-06) Fixed an issue where the single driver injection mode for BareMetal deployments would fail if there was a space in the driver inf name
 	2.2.7 - (2020-02-10) Added a new parameter named TargetOSVersion. Use this parameter when DeploymentType is OSUpgrade and you don't want to rely on the OS version detected from the imported Operating System Upgrade Package or Operating System Image objects.
-						 This parameter should mainly be used as an override and was implemented due to drivers for Windows 10 1903 were incorrectly detected when deploying or upgrading to Windows 10 1909.
+						 This parameter should mainly be used as an override and was implemented due to drivers for Windows 10 1903 were incorrectly detected when deploying or upgrading to Windows 10 1909 using imported source files, not for a 
+						 reference image for Windows 10 1909 as the Enablement Package would have flipped the build change to 18363 in such an image.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -180,7 +181,7 @@ param (
 	[ValidateNotNullOrEmpty()]
 	[string]$OverrideTSPackageID,
 
-	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the value that will be used as the target operating system version e.g. 1909.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the value that will be used as the target operating system version e.g. 18363.")]
 	[ValidateNotNullOrEmpty()]
 	[string]$TargetOSVersion
 )
