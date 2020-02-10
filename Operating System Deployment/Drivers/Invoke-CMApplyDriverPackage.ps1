@@ -38,6 +38,9 @@
 .PARAMETER OSImageTSVariableName
 	Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.
 
+.PARAMETER TargetOSVersion
+	Define the value that will be used as the target operating system version e.g. 1909.
+
 .EXAMPLE
 	# Detect, download and apply drivers during OS deployment with ConfigMgr:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
@@ -122,6 +125,8 @@
 	2.2.4 - (2019-08-09) Fixed an issue on OperationalMode Production to filter out pilot and retired packages
 	2.2.5 - (2019-12-02) Added support for Windows 10 1903, 1909 and additional matching for Microsoft Surface devices (DAT 6.4.0 or neweer)
 	2.2.6 - (2020-02-06) Fixed an issue where the single driver injection mode for BareMetal deployments would fail if there was a space in the driver inf name
+	2.2.7 - (2020-02-10) Added a new parameter named TargetOSVersion. Use this parameter when DeploymentType is OSUpgrade and you don't want to rely on the OS version detected from the imported Operating System Upgrade Package or Operating System Image objects.
+						 This parameter should mainly be used as an override and was implemented due to drivers for Windows 10 1903 were incorrectly detected when deploying or upgrading to Windows 10 1909.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -173,11 +178,15 @@ param (
 
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify a task sequence package ID for a child task sequence. Should only be used when the Apply Operating System step is in a child task sequence.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$OverrideTSPackageID
+	[string]$OverrideTSPackageID,
+
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the value that will be used as the target operating system version e.g. 1909.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$TargetOSVersion
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.2.6"
+	$ScriptVersion = "2.2.7"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	if ($PSCmdLet.ParameterSetName -like "Execute") {
@@ -404,9 +413,17 @@ Process {
 						$OSImageTSVariableValue = $TSEnvironment.Value("$($OSImageTSVariableName)")
 						foreach ($OSImage in $OSImages) {
 							if ($OSImage.PackageID -like $OSImageTSVariableValue) {
+								# Handle support for target OS version override from parameter input
+								if ($Script:PSBoundParameters["TargetOSVersion"]) {
+									$OSBuild = "10.0.$($TargetOSVersion).1"
+								}
+								else {
+									$OSBuild = $OSImage.Version
+								}
+
 								# Create custom object for return value
 								$PSObject = [PSCustomObject]@{
-									OSVersion  = $OSImage.Version
+									OSVersion  = $OSBuild
 									OSArchitecture = $OSImage.Architecture
 								}
 
@@ -420,9 +437,17 @@ Process {
 						Write-CMLogEntry -Value "Multiple OS Image objects detected and OSImageTSVariableName was not specified. Selecting the first OS Image object from web service call" -Severity 1
 						$OSImage = $OSImages | Sort-Object -Descending | Select-Object -First 1
 						
+						# Handle support for target OS version override from parameter input
+						if ($Script:PSBoundParameters["TargetOSVersion"]) {
+							$OSBuild = "10.0.$($TargetOSVersion).1"
+						}
+						else {
+							$OSBuild = $OSImage.Version
+						}
+
 						# Create custom object for return value
 						$PSObject = [PSCustomObject]@{
-							OSVersion  = $OSImage.Version
+							OSVersion  = $OSBuild
 							OSArchitecture = $OSImage.Architecture
 						}
 
@@ -431,9 +456,17 @@ Process {
 					}
 				}
 				else {
+					# Handle support for target OS version override from parameter input
+					if ($Script:PSBoundParameters["TargetOSVersion"]) {
+						$OSBuild = "10.0.$($TargetOSVersion).1"
+					}
+					else {
+						$OSBuild = $OSImage.Version
+					}
+
 					# Create custom object for return value
 					$PSObject = [PSCustomObject]@{
-						OSVersion  = $OSImages.Version
+						OSVersion  = $OSImages.OSBuild
 						OSArchitecture = $OSImages.Architecture
 					}
 
@@ -487,7 +520,7 @@ Process {
 		switch -Wildcard ($InputObject) {
 			"10.0*" {
 				$OSName = "Windows 10"
-				switch (([system.Version]$InputObject).Build) {
+				switch (([System.Version]$InputObject).Build) {
 					"18363" {
 						$OSVersion = 1909
 						}
