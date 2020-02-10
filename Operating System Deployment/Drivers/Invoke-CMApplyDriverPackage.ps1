@@ -65,7 +65,7 @@
 	Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2019-08-09
+    Updated:     2020-02-10
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
 	Contributors: @CodyMathis123, @JamesMcwatty
