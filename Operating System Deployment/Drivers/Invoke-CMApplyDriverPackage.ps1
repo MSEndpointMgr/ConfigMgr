@@ -467,7 +467,7 @@ Process {
 
 					# Create custom object for return value
 					$PSObject = [PSCustomObject]@{
-						OSVersion  = $OSImages.OSBuild
+						OSVersion  = $OSBuild
 						OSArchitecture = $OSImages.Architecture
 					}
 
@@ -524,10 +524,10 @@ Process {
 				switch (([System.Version]$InputObject).Build) {
 					"18363" {
 						$OSVersion = 1909
-						}
+					}
 					"18362" {
 						$OSVersion = 1903
-						}
+					}
 					"17763" {
 						$OSVersion = 1809
 					}
