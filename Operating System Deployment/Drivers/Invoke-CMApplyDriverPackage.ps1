@@ -462,7 +462,7 @@ Process {
 						$OSBuild = "10.0.$($TargetOSVersion).1"
 					}
 					else {
-						$OSBuild = $OSImage.Version
+						$OSBuild = $OSImages.Version
 					}
 
 					# Create custom object for return value
