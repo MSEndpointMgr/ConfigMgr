@@ -900,7 +900,8 @@ Process {
 			[ValidateNotNullOrEmpty()]
 			[System.Object[]]$DriverPackage
 		)
-		foreach ($DriverPackageItem in $DriverPackage) {
+		$DriverPackages = $DriverPackage | Sort-Object -Property PackageName
+		foreach ($DriverPackageItem in $DriverPackages) {
 			Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Processing driver package: $($DriverPackageItem.PackageName)" -Severity 1
 
 			# Construct custom object to hold values for current driver package properties used for matching with current computer details
@@ -1135,7 +1136,7 @@ Process {
     Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
 
 	# Set script error preference variable
-	$ErrorActionPreference = "Stop"    
+	$ErrorActionPreference = "Stop"
 
     # Construct array list for matched drivers packages
 	$DriverPackageList = New-Object -TypeName "System.Collections.ArrayList"
