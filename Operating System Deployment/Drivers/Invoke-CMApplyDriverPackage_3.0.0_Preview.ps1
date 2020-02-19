@@ -901,7 +901,7 @@ Process {
 			[System.Object[]]$DriverPackage
 		)
 		foreach ($DriverPackageItem in $DriverPackage) {
-			Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: Processing driver package: $($DriverPackageItem.PackageName)" -Severity 1
+			Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Processing driver package: $($DriverPackageItem.PackageName)" -Severity 1
 
 			# Construct custom object to hold values for current driver package properties used for matching with current computer details
 			$DriverPackageDetails = [PSCustomObject]@{
@@ -918,7 +918,6 @@ Process {
 			switch ($DriverPackageItem.PackageManufacturer) {
 				"Hewlett-Packard" {
 					$DriverPackageDetails.Model = $DriverPackageItem.PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: Updating driver package model name to align with WMI data" -Severity 1
 				}
 				Default {
 					$DriverPackageDetails.Model = $DriverPackageItem.PackageName.Replace($DriverPackageItem.PackageManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
@@ -941,8 +940,10 @@ Process {
 			}
 
 			if ($DriverPackageDetails.Manufacturer -like $ComputerData.Manufacturer) {
+				Write-CMLogEntry -Value " - Matched manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
 				switch ($ComputerDetectionMethod) {
 					"SystemSKU" {
+						# Attempt to match against SystemSKU
 						$ComputerDetectionMethodResult = Confirm-SystemSKU -DriverPackageInput $DriverPackageDetails.SystemSKU -ComputerData $ComputerData
 
 						# Fall back to using computer model as the detection method instead of SystemSKU
@@ -951,34 +952,112 @@ Process {
 						}
 					}
 					"ComputerModel" {
+						# Attempt to match against computer model
 						$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
 					}
 				}
 
 				if ($ComputerDetectionMethodResult -eq $true) {
-					# Continue here with OS Name, version and architecture...
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+					# Attempt to match against OS name
+					$OSNameDetectionResult = Confirm-OSName -DriverPackageInput $DriverPackageDetails.OSName -OSImageData $OSImageData
+					if ($OSNameDetectionResult -eq $true) {
+						$OSArchitectureDetectionResult = Confirm-Architecture -DriverPackageInput $DriverPackageDetails.Architecture -OSImageData $OSImageData
+						if ($OSArchitectureDetectionResult -eq $true) {
+							if ($DriverPackageDetails.OSVersion -ne $null) {
+								$OSVersionDetectionResult = Confirm-OSVersion -DriverPackageInput $DriverPackageDetails.OSVersion -OSImageData $OSImageData
+								if ($OSVersionDetectionResult -eq $true) {
+	
+									Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+								}
+							}
+							else {
+								# OS Version not detected/present, assume match (Dell)
+								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+							}
+						}
+					}
+
 					
 					# Handle log output for matched driver package properties
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: Manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: Model: $($DriverPackageDetails.Model)" -Severity 1
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: SystemSKU: $($DriverPackageDetails.SystemSKU)" -Severity 1
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: OSName: $($DriverPackageDetails.OSName)" -Severity 1
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: OSVersion: $($DriverPackageDetails.OSVersion)" -Severity 1
-					Write-CMLogEntry -Value " - [PackageID:$($DriverPackageItem.PackageID)]: Architecture: $($DriverPackageDetails.Architecture)" -Severity 1
+					## Remove this?
+					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
+					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Model: $($DriverPackageDetails.Model)" -Severity 1
+					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: SystemSKU: $($DriverPackageDetails.SystemSKU)" -Severity 1
+					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSName: $($DriverPackageDetails.OSName)" -Severity 1
+					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSVersion: $($DriverPackageDetails.OSVersion)" -Severity 1
+					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Architecture: $($DriverPackageDetails.Architecture)" -Severity 1
 					#$DriverPackageList.Add()
 				}
 			}
+		}
+	}
 
-			## function for matching SKU/computer model....
+	function Confirm-OSVersion {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the OS version value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
 
-			$DriverPackageDetails
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData
+		)
+		if ($DriverPackageInput -like $OSImageData.Version) {
+			# Computer model match found
+			Write-CMLogEntry -Value " - Matched operating system version: $($OSImageData.Version)" -Severity 1
+			return $true
+		}
+		else {
+			# Computer model match was not found
+			return $false
+		}
+	}	
+
+	function Confirm-Architecture {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the Architecture value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData
+		)
+		if ($DriverPackageInput -like $OSImageData.Architecture) {
+			# Computer model match found
+			Write-CMLogEntry -Value " - Matched operating system architecture: $($OSImageData.Architecture)" -Severity 1
+			return $true
+		}
+		else {
+			# Computer model match was not found
+			return $false
+		}
+	}
+
+	function Confirm-OSName {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the OS name value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData
+		)
+		if ($DriverPackageInput -like $OSImageData.Name) {
+			# Computer model match found
+			Write-CMLogEntry -Value " - Matched operating system name: $($OSImageData.Name)" -Severity 1
+			return $true
+		}
+		else {
+			# Computer model match was not found
+			return $false
 		}
 	}
 
 	function Confirm-ComputerModel {
 		param(
-			[parameter(Mandatory = $true, HelpMessage = "Specify the SystemSKU value from the driver package object.")]
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer model value from the driver package object.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$DriverPackageInput,
 
@@ -988,6 +1067,7 @@ Process {
 		)
 		if ($DriverPackageInput -like $ComputerData.Model) {
 			# Computer model match found
+			Write-CMLogEntry -Value " - Matched computer model: $($ComputerData.Model)" -Severity 1
 			return $true
 		}
 		else {
@@ -1028,6 +1108,7 @@ Process {
 			}
 			if ($SystemSKUDetectionResult -eq $true) {
 				# SystemSKU match found based upon multiple items detected in computer data input
+				Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.SystemSKU)" -Severity 1
 				return $true
 			}
 			else {
@@ -1037,10 +1118,12 @@ Process {
 		}
 		elseif ($DriverPackageInput -match $ComputerData.SystemSKU) {
 			# SystemSKU match found based upon single item detected in computer data input
+			Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.SystemSKU)" -Severity 1
 			return $true
 		}
 		elseif ((-not([string]::IsNullOrEmpty($ComputerData.FallbackSKU))) -and ($DriverPackageInput -match $ComputerData.FallbackSKU)) {
 			# SystemSKU match found using FallbackSKU value using detection method OEMString, this should only be valid for Dell
+			Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.FallbackSKU)" -Severity 1
 			return $true
 		}
 		else {
@@ -1097,14 +1180,14 @@ Process {
 		$OSImageDetails = Get-OSImageDetails
 
 		Write-CMLogEntry -Value "[WebService]: Completed ConfigMgr WebService phase" -Severity 1
-		Write-CMLogEntry -Value "[DriverPackageMatching]: Starting driver package matching phase" -Severity 1
+		Write-CMLogEntry -Value "[DriverPackage]: Starting driver package matching phase" -Severity 1
 
 		# Match detected driver packages from web service call with computer details and OS image details gathered previously
 		Confirm-DriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -DriverPackage $DriverPackages
 
 
 
-		Write-CMLogEntry -Value "[DriverPackageMatching]: Completed driver package matching phase" -Severity 1
+		Write-CMLogEntry -Value "[DriverPackage]: Completed driver package matching phase" -Severity 1
 
 
 		# TESTING ONLY - REMOVE
@@ -1130,89 +1213,11 @@ Process {
 					
 					# Process each package returned from web service
 					foreach ($Package in $Packages) {
-						if ($ComputerManufacturer -match $Package.PackageManufacturer) {
-							Write-CMLogEntry -Value "Attempting to find a match for driver package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
-							$DetectionContinue = $true
-						}
-						else {
-							$DetectionContinue = $false
-						}
-						
+					
 						if ($DetectionContinue -eq $true) {
-							# Computer detection method matching
-							$ComputerDetectionResult = $false
-							switch ($ComputerManufacturer) {
-								"Hewlett-Packard" {
-									$PackageNameComputerModel = $Package.PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
-								}
-								Default {
-									$PackageNameComputerModel = $Package.PackageName.Replace($ComputerManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
-								}
-							}
 
-							switch ($ComputerDetectionMethod) {
-								"ComputerModel" {
-									if ($PackageNameComputerModel -like $ComputerModel) {
-										Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
-										$ComputerDetectionResult = $true
-									}
-								}
-								"SystemSKU" {
-									# Handle vendor specific delimiters
-									switch ($ComputerManufacturer) {
-										"Hewlett-Packard" {
-											if ($SystemSKU -match ",") {
-												$SystemSKUDelimiter = ","
-											}
-										}
-										"Dell" {
-											if ($SystemSKU -match ";") {
-												$SystemSKUDelimiter = ";"
-											}
-										}
-									}
-									
-									# Multiple SKU matching for Dell systems
-									if (-not ([string]::IsNullOrEmpty($SystemSKUDelimiter))) {
-										Write-CMLogEntry -Value "Multiple SKU values detected, attempting to match for each value" -Severity 1
-										foreach ($SKU in ($SystemSKU -split $SystemSKUDelimiter)) {
-											Write-CMLogEntry -Value "Attempting to match for SKU value: $($SKU)" -Severity 1
-											# Attempt to match based on individual SKU numbers
-											if ($Package.PackageDescription -match $SKU) {
-												$SKUMatchDetectionResult = $true
-											}
-											else {
-												$SKUMatchDetectionResult = $false	
-											}
-										}
-										if ($SKUMatchDetectionResult -eq $true) {
-											# SKU match found, setting computer detection logic to true and continuing
-											Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 1
-											$ComputerDetectionResult = $true
-										}
-									}
-									elseif ($Package.PackageDescription -match $SystemSKU) {
-										# SKU match found based upon single SystemSKU value, setting computer detection logic to true and continuing
-										Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) and SKU value ($($SystemSKU))" -Severity 1
-										$ComputerDetectionResult = $true
-									}
-									elseif ((-not ([string]::IsNullOrEmpty($OEMString))) -and ($Package.PackageDescription -match $OEMString)) {
-										Write-CMLogEntry -Value "Unable to match computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 2
-										Write-CMLogEntry -Value "Fallback from SystemSKU match found using detection method: OEM string" -Severity 1
-										$ComputerDetectionResult = $true
-									}
-									
-									# Computer detection failed
-									if ($ComputerDetectionResult -ne $true) {
-										Write-CMLogEntry -Value "Unable to match computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 2
-										if ($PackageNameComputerModel -match $ComputerModel) {
-											Write-CMLogEntry -Value "Fallback from SystemSKU match found for computer model instead using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
-											$ComputerDetectionResult = $true
-										}
-										$ComputerDetectionResult = $true
-									}
-								}
-							}
+
+							
 							
 							# Match manufacturer, operating system name and architecture criteria
 							if ($ComputerDetectionResult -eq $true) {
