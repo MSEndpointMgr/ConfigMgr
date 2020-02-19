@@ -900,7 +900,9 @@ Process {
 			[ValidateNotNullOrEmpty()]
 			[System.Object[]]$DriverPackage
 		)
+		# Sort all driver package objects by package name property
 		$DriverPackages = $DriverPackage | Sort-Object -Property PackageName
+		
 		foreach ($DriverPackageItem in $DriverPackages) {
 			Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Processing driver package: $($DriverPackageItem.PackageName)" -Severity 1
 
