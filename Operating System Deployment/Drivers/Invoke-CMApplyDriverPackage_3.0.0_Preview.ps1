@@ -902,12 +902,18 @@ Process {
 		)
 		# Sort all driver package objects by package name property
 		$DriverPackages = $DriverPackage | Sort-Object -Property PackageName
-		
+
+		Write-CMLogEntry -Value "- Limiting driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
+		$DriverPackages = $DriverPackages | Where-Object { $_.PackageManufacturer -like $ComputerData.Manufacturer }
+
 		foreach ($DriverPackageItem in $DriverPackages) {
 			Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Processing driver package: $($DriverPackageItem.PackageName)" -Severity 1
 
 			# Construct custom object to hold values for current driver package properties used for matching with current computer details
 			$DriverPackageDetails = [PSCustomObject]@{
+				PackageID = $DriverPackageItem.PackageID
+				PackageVersion = $DriverPackageItem.PackageVersion
+				DateCreated = $DriverPackageItem.PackageCreated
 				Manufacturer = $DriverPackageItem.PackageManufacturer
 				Model = $null
 				SystemSKU = $DriverPackageItem.PackageDescription.Split(":").Replace("(", "").Replace(")", "")[1]
@@ -942,54 +948,42 @@ Process {
 				$DriverPackageDetails.OSVersion = $Matches.OSVersion
 			}
 
-			if ($DriverPackageDetails.Manufacturer -like $ComputerData.Manufacturer) {
-				Write-CMLogEntry -Value " - Matched manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
-				switch ($ComputerDetectionMethod) {
-					"SystemSKU" {
-						# Attempt to match against SystemSKU
-						$ComputerDetectionMethodResult = Confirm-SystemSKU -DriverPackageInput $DriverPackageDetails.SystemSKU -ComputerData $ComputerData
+			switch ($ComputerDetectionMethod) {
+				"SystemSKU" {
+					# Attempt to match against SystemSKU
+					$ComputerDetectionMethodResult = Confirm-SystemSKU -DriverPackageInput $DriverPackageDetails.SystemSKU -ComputerData $ComputerData
 
-						# Fall back to using computer model as the detection method instead of SystemSKU
-						if ($ComputerDetectionMethodResult -eq $false) {
-							$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
-						}
-					}
-					"ComputerModel" {
-						# Attempt to match against computer model
+					# Fall back to using computer model as the detection method instead of SystemSKU
+					if ($ComputerDetectionMethodResult -eq $false) {
 						$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
 					}
 				}
+				"ComputerModel" {
+					# Attempt to match against computer model
+					$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
+				}
+			}
 
-				if ($ComputerDetectionMethodResult -eq $true) {
-					# Attempt to match against OS name
-					$OSNameDetectionResult = Confirm-OSName -DriverPackageInput $DriverPackageDetails.OSName -OSImageData $OSImageData
-					if ($OSNameDetectionResult -eq $true) {
-						$OSArchitectureDetectionResult = Confirm-Architecture -DriverPackageInput $DriverPackageDetails.Architecture -OSImageData $OSImageData
-						if ($OSArchitectureDetectionResult -eq $true) {
-							if ($DriverPackageDetails.OSVersion -ne $null) {
-								$OSVersionDetectionResult = Confirm-OSVersion -DriverPackageInput $DriverPackageDetails.OSVersion -OSImageData $OSImageData
-								if ($OSVersionDetectionResult -eq $true) {
-	
-									Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
-								}
-							}
-							else {
-								# OS Version not detected/present, assume match (Dell)
+			if ($ComputerDetectionMethodResult -eq $true) {
+				# Attempt to match against OS name
+				$OSNameDetectionResult = Confirm-OSName -DriverPackageInput $DriverPackageDetails.OSName -OSImageData $OSImageData
+				if ($OSNameDetectionResult -eq $true) {
+					$OSArchitectureDetectionResult = Confirm-Architecture -DriverPackageInput $DriverPackageDetails.Architecture -OSImageData $OSImageData
+					if ($OSArchitectureDetectionResult -eq $true) {
+						if ($DriverPackageDetails.OSVersion -ne $null) {
+							$OSVersionDetectionResult = Confirm-OSVersion -DriverPackageInput $DriverPackageDetails.OSVersion -OSImageData $OSImageData
+							if ($OSVersionDetectionResult -eq $true) {
+								# Match found for all critiera including OS version
 								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+								$DriverPackageList.Add($DriverPackageDetails) | Out-Null
 							}
 						}
+						else {
+							# Match found for all critiera except for OS version, assuming here that the vendor does not provide OS version specific driver packages
+							Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+							$DriverPackageList.Add($DriverPackageDetails) | Out-Null
+						}
 					}
-
-					
-					# Handle log output for matched driver package properties
-					## Remove this?
-					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
-					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Model: $($DriverPackageDetails.Model)" -Severity 1
-					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: SystemSKU: $($DriverPackageDetails.SystemSKU)" -Severity 1
-					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSName: $($DriverPackageDetails.OSName)" -Severity 1
-					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSVersion: $($DriverPackageDetails.OSVersion)" -Severity 1
-					#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Architecture: $($DriverPackageDetails.Architecture)" -Severity 1
-					#$DriverPackageList.Add()
 				}
 			}
 		}
@@ -1188,10 +1182,14 @@ Process {
 		# Match detected driver packages from web service call with computer details and OS image details gathered previously
 		Confirm-DriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -DriverPackage $DriverPackages
 
-
-
 		Write-CMLogEntry -Value "[DriverPackage]: Completed driver package matching phase" -Severity 1
+		Write-CMLogEntry -Value "[DriverPackagePreparation]: Starting driver package preparation phase" -Severity 1
 
+
+		$DriverPackageList
+
+
+		Write-CMLogEntry -Value "[DriverPackagePreparation]: Completed driver package preparation phase" -Severity 1
 
 		# TESTING ONLY - REMOVE
 		$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
@@ -1201,6 +1199,16 @@ Process {
         Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process failed, please refer to previous error or warning messages" -Severity 3
 	}
 	
+
+
+	# Handle log output for matched driver package properties
+	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
+	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Model: $($DriverPackageDetails.Model)" -Severity 1
+	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: SystemSKU: $($DriverPackageDetails.SystemSKU)" -Severity 1
+	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSName: $($DriverPackageDetails.OSName)" -Severity 1
+	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSVersion: $($DriverPackageDetails.OSVersion)" -Severity 1
+	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Architecture: $($DriverPackageDetails.Architecture)" -Severity 1
+
 
 
     ##### END for 3.0.0 Preview
