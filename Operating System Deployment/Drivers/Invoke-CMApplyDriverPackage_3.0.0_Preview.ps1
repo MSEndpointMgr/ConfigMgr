@@ -41,6 +41,9 @@
 .PARAMETER TargetOSVersion
 	Define the value that will be used as the target operating system version e.g. 18363.
 
+.PARAMETER OSVersionFallback
+	Use this switch to check for drivers packages that matches earlier versions of Windows than what's detected from web service call.
+
 .EXAMPLE
 	# Detect, download and apply drivers during OS deployment with ConfigMgr:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers"
@@ -184,7 +187,11 @@ param (
 
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the value that will be used as the target operating system version e.g. 18363.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$TargetOSVersion
+	[string]$TargetOSVersion,
+
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Use this switch to check for drivers packages that matches earlier versions of Windows than what's detected from web service call.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
+	[switch]$OSVersionFallback
 )
 Begin {
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -877,12 +884,12 @@ Process {
 
     function Set-ComputerDetectionMethod {
         if ($ComputerDetection.SystemSKUDetected -eq $true) {
-            $Script:ComputerDetectionMethod = "SystemSKU"
-            Write-CMLogEntry -Value " - Determined primary computer detection method: $($ComputerDetectionMethod)" -Severity 1
+			Write-CMLogEntry -Value " - Determined primary computer detection method: SystemSKU" -Severity 1
+			return "SystemSKU"
         }
         else {
-            $Script:ComputerDetectionMethod = "ComputerModel"
-            Write-CMLogEntry -Value " - Determined fallback computer detection method: $($ComputerDetectionMethod)" -Severity 1
+			Write-CMLogEntry -Value " - Determined fallback computer detection method: ComputerModel" -Severity 1
+            return "ComputerModel"
         }
 	}
 	
@@ -898,7 +905,11 @@ Process {
 
 			[parameter(Mandatory = $true, HelpMessage = "Specify the driver package object to be validated.")]
 			[ValidateNotNullOrEmpty()]
-			[System.Object[]]$DriverPackage
+			[System.Object[]]$DriverPackage,
+
+			[parameter(Mandatory = $false, HelpMessage = "Set to True to check for drivers packages that matches earlier versions of Windows than what's detected from web service call.")]
+			[ValidateNotNullOrEmpty()]
+			[bool]$OSVersionFallback = $false
 		)
 		# Sort all driver package objects by package name property
 		$DriverPackages = $DriverPackage | Sort-Object -Property PackageName
@@ -907,10 +918,9 @@ Process {
 		$DriverPackages = $DriverPackages | Where-Object { $_.PackageManufacturer -like $ComputerData.Manufacturer }
 
 		foreach ($DriverPackageItem in $DriverPackages) {
-			Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Processing driver package: $($DriverPackageItem.PackageName)" -Severity 1
-
 			# Construct custom object to hold values for current driver package properties used for matching with current computer details
 			$DriverPackageDetails = [PSCustomObject]@{
+				PackageName = $DriverPackageItem.PackageName
 				PackageID = $DriverPackageItem.PackageID
 				PackageVersion = $DriverPackageItem.PackageVersion
 				DateCreated = $DriverPackageItem.PackageCreated
@@ -948,6 +958,16 @@ Process {
 				$DriverPackageDetails.OSVersion = $Matches.OSVersion
 			}
 
+			# Set counters for logging output of how many matching checks was successfull
+			$DetectionCounter = 0
+			if ($DriverPackageDetails.OSVersion -ne $null) {
+				$DetectionMethodsCount = 4
+			}
+			else {
+				$DetectionMethodsCount = 3
+			}
+			Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Processing driver package with $($DetectionMethodsCount) detection methods: $($DriverPackageItem.PackageName)" -Severity 1
+
 			switch ($ComputerDetectionMethod) {
 				"SystemSKU" {
 					# Attempt to match against SystemSKU
@@ -965,22 +985,44 @@ Process {
 			}
 
 			if ($ComputerDetectionMethodResult -eq $true) {
+				# Increase detection counter since computer detection was successful
+				$DetectionCounter++
+
 				# Attempt to match against OS name
 				$OSNameDetectionResult = Confirm-OSName -DriverPackageInput $DriverPackageDetails.OSName -OSImageData $OSImageData
 				if ($OSNameDetectionResult -eq $true) {
+					# Increase detection counter since OS name detection was successful
+					$DetectionCounter++
+
 					$OSArchitectureDetectionResult = Confirm-Architecture -DriverPackageInput $DriverPackageDetails.Architecture -OSImageData $OSImageData
 					if ($OSArchitectureDetectionResult -eq $true) {
+						# Increase detection counter since OS architecture detection was successful
+						$DetectionCounter++
+
 						if ($DriverPackageDetails.OSVersion -ne $null) {
-							$OSVersionDetectionResult = Confirm-OSVersion -DriverPackageInput $DriverPackageDetails.OSVersion -OSImageData $OSImageData
+							# Handle if OS version should check for fallback versions or match with data from OSImageData variable
+							if ($OSVersionFallback -eq $true) {
+								$OSVersionDetectionResult = Confirm-OSVersion -DriverPackageInput $DriverPackageDetails.OSVersion -OSImageData $OSImageData -OSVersionFallback $true
+							}
+							else {
+								$OSVersionDetectionResult = Confirm-OSVersion -DriverPackageInput $DriverPackageDetails.OSVersion -OSImageData $OSImageData
+							}
+							
 							if ($OSVersionDetectionResult -eq $true) {
+								# Increase detection counter since OS version detection was successful
+								$DetectionCounter++
+
 								# Match found for all critiera including OS version
-								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer for $($DetectionCounter)/$($DetectionMethodsCount) checks, adding to list for post-processing of matched driver packages" -Severity 1
 								$DriverPackageList.Add($DriverPackageDetails) | Out-Null
+							}
+							else {
+								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Skipping driver package since only $($DetectionCounter)/$($DetectionMethodsCount) checks was matched" -Severity 2
 							}
 						}
 						else {
 							# Match found for all critiera except for OS version, assuming here that the vendor does not provide OS version specific driver packages
-							Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing matched driver packages" -Severity 1
+							Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing of matched driver packages" -Severity 1
 							$DriverPackageList.Add($DriverPackageDetails) | Out-Null
 						}
 					}
@@ -997,16 +1039,33 @@ Process {
 
 			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
 			[ValidateNotNullOrEmpty()]
-			[PSCustomObject]$OSImageData
+			[PSCustomObject]$OSImageData,
+
+			[parameter(Mandatory = $false, HelpMessage = "Set to True to check for drivers packages that matches earlier versions of Windows than what's detected from web service call.")]
+			[ValidateNotNullOrEmpty()]
+			[bool]$OSVersionFallback = $false			
 		)
-		if ($DriverPackageInput -like $OSImageData.Version) {
-			# Computer model match found
-			Write-CMLogEntry -Value " - Matched operating system version: $($OSImageData.Version)" -Severity 1
-			return $true
+		if ($OSVersionFallback -eq $true) {
+			if ([int]$DriverPackageInput -lt [int]$OSImageData.Version) {
+				# OS version match found where driver package input was less than input from OSImageData version
+				Write-CMLogEntry -Value " - Matched operating system version: $($DriverPackageInput)" -Severity 1
+				return $true
+			}
+			else {
+				# OS version match was not found
+				return $false
+			}
 		}
 		else {
-			# Computer model match was not found
-			return $false
+			if ($DriverPackageInput -like $OSImageData.Version) {
+				# OS version match found
+				Write-CMLogEntry -Value " - Matched operating system version: $($OSImageData.Version)" -Severity 1
+				return $true
+			}
+			else {
+				# OS version match was not found
+				return $false
+			}
 		}
 	}	
 
@@ -1021,12 +1080,12 @@ Process {
 			[PSCustomObject]$OSImageData
 		)
 		if ($DriverPackageInput -like $OSImageData.Architecture) {
-			# Computer model match found
+			# OS architecture match found
 			Write-CMLogEntry -Value " - Matched operating system architecture: $($OSImageData.Architecture)" -Severity 1
 			return $true
 		}
 		else {
-			# Computer model match was not found
+			# OS architecture match was not found
 			return $false
 		}
 	}
@@ -1042,12 +1101,12 @@ Process {
 			[PSCustomObject]$OSImageData
 		)
 		if ($DriverPackageInput -like $OSImageData.Name) {
-			# Computer model match found
+			# OS name match found
 			Write-CMLogEntry -Value " - Matched operating system name: $($OSImageData.Name)" -Severity 1
 			return $true
 		}
 		else {
-			# Computer model match was not found
+			# OS name match was not found
 			return $false
 		}
 	}
@@ -1129,7 +1188,203 @@ Process {
 		}
 	}
 
-    Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
+	function Confirm-DriverPackageList {
+		switch ($DriverPackageList.Count) {
+			0 {
+				Write-CMLogEntry -Value " - Amount of driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 2
+
+				if ($Script:PSBoundParameters["OSVersionFallback"]) {
+					Write-CMLogEntry -Value " - Validation process detected empty list of matched driver packages, however OSVersionFallback switch was passed on the command line" -Severity 2
+					Write-CMLogEntry -Value " - Starting re-matching process of driver packages for older Windows versions" -Severity 1
+
+					# Attempt to match all drivers packages again but this time where OSVersion from driver packages is lower than what's detected from web service call
+					Write-CMLogEntry -Value "[DriverPackageFallback]: Starting driver package OS version fallback matching phase" -Severity 1
+					Confirm-DriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -DriverPackage $DriverPackages -OSVersionFallback $true
+
+					if ($DriverPackageList.Count -ge 1) {
+						# Sort driver packages descending based on OSVersion, DateCreated properties and select the most recently created one
+						$DriverPackageList = $DriverPackageList | Sort-Object -Property OSVersion, DateCreated -Descending | Select-Object -First 1
+
+						Write-CMLogEntry -Value " - Selected driver package with name: $($DriverPackageList[0].PackageName)" -Severity 1
+						Write-CMLogEntry -Value " - Successfully completed validation after fallback process and detected a single driver package, script execution is allowed to continue" -Severity 1
+						Write-CMLogEntry -Value "[DriverPackageFallback]: Completed driver package OS version fallback matching phase" -Severity 1
+					}
+					else {
+						Write-CMLogEntry -Value " - Validation after fallback process failed with empty list of matched driver packages, script execution will be terminated" -Severity 3
+
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+					}
+				}
+				else {
+					Write-CMLogEntry -Value " - Validation failed with empty list of matched driver packages, script execution will be terminated" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}
+			1 {
+				Write-CMLogEntry -Value " - Amount of driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
+				Write-CMLogEntry -Value " - Successfully completed validation a single driver package, script execution is allowed to continue" -Severity 1
+			}
+			default {
+				Write-CMLogEntry -Value " - Amount of driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
+
+				if ($ComputerDetectionMethod -like "SystemSKU") {
+					if (($DriverPackageList | Where-Object { $_.SystemSKU -notlike $DriverPackageList[0].SystemSKU }) -eq $null) {
+						Write-CMLogEntry -Value " - NOTICE: Computer detection method is currently '$($ComputerDetectionMethod)', and multiple packages have been matched with the same SystemSKU value" -Severity 1
+						Write-CMLogEntry -Value " - NOTICE: This is a supported scenario where the vendor use the same driver package for multiple models" -Severity 1
+						Write-CMLogEntry -Value " - NOTICE: Validation process will automatically choose the most recently created driver package, even if it means that the computer model names may not match" -Severity 1
+	
+						# Sort driver packages descending based on DateCreated property and select the most recently created one
+						$DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
+						
+						Write-CMLogEntry -Value " - Selected driver package with name: $($DriverPackageList[0].PackageName)" -Severity 1
+						Write-CMLogEntry -Value " - Successfully completed validation with multiple detected driver packages, script execution is allowed to continue" -Severity 1
+					}
+					else {
+						# This should not be possible, but added to handle output to log file for user to reach out to the developers
+						Write-CMLogEntry -Value " - WARNING: Computer detection method is currently '$($ComputerDetectionMethod)', and multiple packages have been matched but with different SystemSKU value" -Severity 2
+						Write-CMLogEntry -Value " - WARNING: This should not be a possible scenario, please reach out to the developers of this script" -Severity 2
+					}
+				}
+				else {
+					Write-CMLogEntry -Value " - NOTICE: Computer detection method is currently '$($ComputerDetectionMethod)', and multiple packages have been matched with the same Model value" -Severity 1
+					Write-CMLogEntry -Value " - NOTICE: Validation process will automatically choose the most recently created driver package by the DateCreated property" -Severity 1
+
+					# Sort driver packages descending based on DateCreated property and select the most recently created one
+					$DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
+				}
+			}
+		}
+	}
+
+	function Invoke-DownloadDriverPackageContent {
+		Write-CMLogEntry -Value " - Attempting to download content files for matched driver package: $($DriverPackageList[0].PackageName)" -Severity 1
+
+		# Depending on current deployment type, attempt to download driver package content
+		switch ($DeploymentType) {
+			"PreCache" {
+				$DownloadInvocation = Invoke-CMDownloadContent -PackageID $DriverPackageList[0].PackageID -DestinationLocationType "CCMCache" -DestinationVariableName "OSDDriverPackage"
+			}
+			default {
+				$DownloadInvocation = Invoke-CMDownloadContent -PackageID $DriverPackageList[0].PackageID -DestinationLocationType "Custom" -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+			}
+		}
+
+		# If download process was successful, meaning exit code from above function was 0, return the download location path
+		if ($DownloadInvocation -eq 0) {
+			$DriverPackageContentLocation = $TSEnvironment.Value("OSDDriverPackage01")
+			Write-CMLogEntry -Value " - Driver package content files was successfully downloaded to: $($DriverPackageContentLocation)" -Severity 1
+
+			# Handle return value for successful download of driver package content files
+			return $DriverPackageContentLocation
+		}
+		else {
+			Write-CMLogEntry -Value " - Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3
+
+			# Throw terminating error
+			$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+			$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+		}
+	}
+
+	function Install-DriverPackageContent {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "....")]
+			[ValidateNotNullOrEmpty()]
+			[string]$ContentLocation
+		)
+		switch ($DeploymentType) {
+			"BareMetal" {
+				# Apply drivers recursively from downloaded driver package location
+				Write-CMLogEntry -Value " - Attempting to apply drivers using dism.exe located in: $($ContentLocation)" -Severity 1
+				
+				# Determine driver injection method from parameter input
+				switch ($DriverInstallMode) {
+					"Single" {
+						try {
+							Write-CMLogEntry -Value " - DriverInstallMode is currently set to: $($DriverInstallMode)" -Severity 1
+
+							# Get driver full path and install each driver seperately
+							$DriverINFs = Get-ChildItem -Path $ContentLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
+							if ($DriverINFs -ne $null) {
+								foreach ($DriverINF in $DriverINFs) {
+									# Install specific driver
+									Write-CMLogEntry -Value " - Attempting to install driver: $($DriverINF.FullName)" -Severity 1
+									$ApplyDriverInvocation = Invoke-Executable -FilePath "dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:`"$($DriverINF.FullName)`""
+									
+									# Validate driver injection
+									if ($ApplyDriverInvocation -eq 0) {
+										Write-CMLogEntry -Value " - Successfully installed driver using dism.exe" -Severity 1
+									}
+									else {
+										Write-CMLogEntry -Value " - An error occurred while installing driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
+									}
+								}
+							}
+							else {
+								Write-CMLogEntry -Value " - An error occurred while enumerating driver paths, downloaded driver package does not contain any INF files" -Severity 3
+
+								# Throw terminating error
+								$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+								$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+							}
+						}
+						catch [System.Exception] {
+							Write-CMLogEntry -Value " - An error occurred while installing drivers. See DISM.log for more details" -Severity 2
+
+							# Throw terminating error
+							$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+							$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+						}
+					}
+					"Recurse" {
+						Write-CMLogEntry -Value " - DriverInstallMode is currently set to: $($DriverInstallMode)" -Severity 1
+
+						# Apply drivers recursively
+						$ApplyDriverInvocation = Invoke-Executable -FilePath "dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($ContentLocation) /Recurse"
+						
+						# Validate driver injection
+						if ($ApplyDriverInvocation -eq 0) {
+							Write-CMLogEntry -Value " - Successfully installed drivers recursively in driver package content location using dism.exe" -Severity 1
+						}
+						else {
+							Write-CMLogEntry -Value " - An error occurred while installing drivers. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
+						}
+					}
+				}
+			}
+			"OSUpgrade" {
+				# For OSUpgrade, don't attempt to install drivers as this is handled by setup.exe when used together with OSDUpgradeStagedContent
+				Write-CMLogEntry -Value " - Driver package content downloaded successfully and located in: $($ContentLocation)" -Severity 1
+				
+				# Set OSDUpgradeStagedContent task sequence variable
+				Write-CMLogEntry -Value " - Attempting to set OSDUpgradeStagedContent task sequence variable with value: $($ContentLocation)" -Severity 1
+				$TSEnvironment.Value("OSDUpgradeStagedContent") = "$($ContentLocation)"
+				Write-CMLogEntry -Value " - Successfully completed driver package staging process" -Severity 1
+			}
+			"DriverUpdate" {
+				# Apply drivers recursively from downloaded driver package location
+				Write-CMLogEntry -Value " - Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($ContentLocation)" -Severity 1
+				$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $ContentLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
+				Write-CMLogEntry -Value " - Successfully installed drivers" -Severity 1
+			}
+			"PreCache" {
+				# Driver package content downloaded successfully, log output and exit script
+				Write-CMLogEntry -Value " - Driver package content successfully downloaded and pre-cached to: $($ContentLocation)" -Severity 1
+			}
+		}
+	}
+
+	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
+	if ($PSCmdLet.ParameterSetName -like "Debug") {
+		Write-CMLogEntry -Value " - Apply driver package process initiated in debug mode" -Severity 1
+	}	
+	Write-CMLogEntry -Value " - Apply driver package deployment type: $($DeploymentType)" -Severity 1
+	Write-CMLogEntry -Value " - Apply driver package operational mode: $($OperationalMode)" -Severity 1
 
 	# Set script error preference variable
 	$ErrorActionPreference = "Stop"
@@ -1137,27 +1392,20 @@ Process {
     # Construct array list for matched drivers packages
 	$DriverPackageList = New-Object -TypeName "System.Collections.ArrayList"
 
-	if ($PSCmdLet.ParameterSetName -eq "Execute") {
-		Write-CMLogEntry -Value " - Driver download package process initiated" -Severity 1
-	}
-	elseif ($PSCmdLet.ParameterSetName -eq "Debug") {
-		Write-CMLogEntry -Value " - Driver download package process initiated in debug mode" -Severity 1
-	}
-
     try {
         Write-CMLogEntry -Value "[PrerequisiteChecker]: Starting environment prerequisite checker" -Severity 1
 
         # Determine if running on supported computer system type
         Get-ComputerSystemType
 
-        # Determine computer manufacturer, model, SystemSKU and FallbackSKU
-        $ComputerData = Get-ComputerData
+		# Determine computer manufacturer, model, SystemSKU and FallbackSKU
+		$ComputerData = Get-ComputerData
 
         # Validate required computer details have successfully been gathered from WMI
         Test-ComputerDetails -InputObject $ComputerData
 
         # Determine the computer detection method to be used for matching against driver packages
-        Set-ComputerDetectionMethod
+        $ComputerDetectionMethod = Set-ComputerDetectionMethod
 
         Write-CMLogEntry -Value "[PrerequisiteChecker]: Completed environment prerequisite checker" -Severity 1
         Write-CMLogEntry -Value "[WebService]: Starting ConfigMgr WebService phase" -Severity 1
@@ -1183,13 +1431,33 @@ Process {
 		Confirm-DriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -DriverPackage $DriverPackages
 
 		Write-CMLogEntry -Value "[DriverPackage]: Completed driver package matching phase" -Severity 1
-		Write-CMLogEntry -Value "[DriverPackagePreparation]: Starting driver package preparation phase" -Severity 1
+		Write-CMLogEntry -Value "[DriverPackageValidation]: Starting driver package validation phase" -Severity 1
 
+		# Validate that at least one driver package was matched against computer data
+		# Check if multiple driver packages were detected and ensure the most recent one by sorting after the DateCreated property from original web service call
+		Confirm-DriverPackageList
 
-		$DriverPackageList
+		Write-CMLogEntry -Value "[DriverPackageValidation]: Completed driver package validation phase" -Severity 1
 
+		# At this point, the code below here is not allowed to be executed in debug mode, as it requires access to the Microsoft.SMS.TSEnvironment COM object
+		if ($PSCmdLet.ParameterSetName -like "Execute") {
+			Write-CMLogEntry -Value "[DriverPackageDownload]: Starting driver package download phase" -Severity 1
 
-		Write-CMLogEntry -Value "[DriverPackagePreparation]: Completed driver package preparation phase" -Severity 1
+			# Attempt to download the matched driver package content files from distribution point
+			$DriverPackageContentLocation = Invoke-DownloadDriverPackageContent
+
+			Write-CMLogEntry -Value "[DriverPackageDownload]: Completed driver package download phase" -Severity 1
+			Write-CMLogEntry -Value "[DriverPackageInstall]: Starting driver package install phase" -Severity 1
+
+			# Depending on deployment type, take action accordingly when applying the driver package files
+			Install-DriverPackageContent -ContentLocation $DriverPackageContentLocation
+
+			Write-CMLogEntry -Value "[DriverPackageInstall]: Completed driver package install phase" -Severity 1
+		}
+		else {
+			Write-CMLogEntry -Value " - Script has successfully completed debug mode" -Severity 1
+			Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
+		}
 
 		# TESTING ONLY - REMOVE
 		$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
@@ -1198,478 +1466,127 @@ Process {
     catch [System.Exception] {
         Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process failed, please refer to previous error or warning messages" -Severity 3
 	}
+
+	Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
 	
-
-
-	# Handle log output for matched driver package properties
-	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Manufacturer: $($DriverPackageDetails.Manufacturer)" -Severity 1
-	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Model: $($DriverPackageDetails.Model)" -Severity 1
-	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: SystemSKU: $($DriverPackageDetails.SystemSKU)" -Severity 1
-	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSName: $($DriverPackageDetails.OSName)" -Severity 1
-	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: OSVersion: $($DriverPackageDetails.OSVersion)" -Severity 1
-	#Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Architecture: $($DriverPackageDetails.Architecture)" -Severity 1
-
-
 
     ##### END for 3.0.0 Preview
-	
-	# Validate operating system name was detected
-	if ($OSName -ne $null) {
-		# Validate not virtual machine
-		
-		if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
+
+	if ($EmptyVariable -like "EMPTY") {
+		if ($PSBoundParameters.ContainsKey("UseDriverFallback") -eq $true) {
+			Write-CMLogEntry -Value "Driver fallback parameter specified and no matching computer model driver packages found" -Severity 1
+			
 			if ($Packages -ne $null) {
-				if (($ComputerModel -ne $null) -and (-not([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not([System.String]::IsNullOrEmpty($SystemSKU))))) {
-
-					
-					# Process each package returned from web service
-					foreach ($Package in $Packages) {
-					
-						if ($DetectionContinue -eq $true) {
-
-
-							
-							
-							# Match manufacturer, operating system name and architecture criteria
-							if ($ComputerDetectionResult -eq $true) {
-								if (($Package.PackageManufacturer -match $ComputerManufacturer) -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture) -and ($Package.PackageDescription -match $SystemSKU)) {
-									# Match operating system criteria per manufacturer for Windows 10 packages only
-									if ($OSName -match "Windows 10") {
-										if ($Package.PackageName -match $OSVersion) {
-											Write-CMLogEntry -Value "Attempting to match driver package name with OS name '$($OSName)' and version $($OSVersion) for $($ComputerManufacturer)" -Severity 1
-											$Package | Add-Member -NotePropertyName "OSVersionDetected" -NotePropertyValue $true
-											$MatchFound = $true
-										}
-										else {
-											Write-CMLogEntry -Value "Unable to match driver package name with OS version '$($OSVersion)', falling back to match found for '$($OSName)'" -Severity 1
-											$Package | Add-Member -NotePropertyName "OSVersionDetected" -NotePropertyValue $false
-											$MatchFound = $true
-										}
-									}
-									else {
-										Write-CMLogEntry -Value "Match found between driver package and legacy operating system" -Severity 1
-										$MatchFound = $true
-									}
-									
-									# Add package to list if match is found
-									if ($MatchFound -eq $true) {
-										Write-CMLogEntry -Value "Match found for manufacturer, operating system and architecture: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
-										Write-CMLogEntry -Value "Adding driver package to list of packages to process" -Severity 1
-										$PackageList.Add($Package) | Out-Null
-									}
-									else {
-										Write-CMLogEntry -Value "Unable to find a match for all criteria for driver package, driver package will not be added to list of matching packages" -Severity 2
-									}
-								}
-								else {
-									Write-CMLogEntry -Value "Driver package does not meet computer model, manufacturer and operating system and architecture criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
-								}
-							}
-							else {
-								Write-CMLogEntry -Value "Driver package does not meet computer model criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
-							}
-						}
+				# Process packages returned from web service
+				Write-CMLogEntry -Value "Attempting to match a driver fallback package" -Severity 1
+				foreach ($Package in $Packages) {
+					Write-CMLogEntry -Value "Processing $($Package.PackageName)" -Severity 1
+					if (($Package.PackageName -match "Driver Fallback") -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
+						Write-CMLogEntry -Value "Found Driver Fallback package match: $($Package.PackageName)" -Severity 1
+						$PackageList.Add($Package) | Out-Null
 					}
-					
-					# Process matching items in package list
-					if ($PackageList -ne $null) {
-						# Determine the most current package from list
-						if (-not ($PSCmdLet.ParameterSetName -eq "Debug")) {
-							if ($PackageList.Count -eq 1) {
-								try {
-									# Attempt to download driver package content
-									Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content - $($PackageList[0].PackageID)" -Severity 1
+				}
+				
+				# Process package list if not empty
+				if (-not ($PSCmdLet.ParameterSetName -eq "Debug")) {
+					if ($PackageList.Count -eq 1) {
+						try {
+							# Attempt to download driver fallback package content
+							Write-CMLogEntry -Value "Attempting to download driver fallback package content" -Severity 1
+							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+							
+							try {
+								if ($DownloadInvocation -eq 0) {
+									$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
+									Write-CMLogEntry -Value "Driver files are storage location set to $($OSDDriverPackageLocation)" -Severity 1
 									switch ($DeploymentType) {
-										"PreCache" {
-											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
-										}
-										Default {
-											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-										}
-									}
-									
-									try {
-										if ($DownloadInvocation -eq 0) {
-											$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
-											Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
-											
-											switch ($DeploymentType) {
-												"BareMetal" {
-													# Apply drivers recursively from downloaded driver package location
-													Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-													
-													# Determine driver injection method from parameter input
-													switch ($DriverInstallMode) {
-														"Single" {
-															try {
-																# Get driver full path and install each driver seperately
-																$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
-																if ($DriverINFs -ne $null) {
-																	foreach ($DriverINF in $DriverINFs) {
-																		# Install specific driver
-																		Write-CMLogEntry -Value "Attempting to install driver: $($DriverINF.FullName)" -Severity 1
-																		$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:`"$($DriverINF.FullName)`""
-																		
-																		# Validate driver injection
-																		if ($ApplyDriverInvocation -eq 0) {
-																			Write-CMLogEntry -Value "Successfully applied driver using dism.exe" -Severity 1
-																		}
-																		else {
-																			Write-CMLogEntry -Value "An error occurred while applying driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																		}
-																	}
-																}
-																else {
-																	Write-CMLogEntry -Value "An error occurred while enumerating driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
-																}
-															}
-															catch [System.Exception] {
-																Write-CMLogEntry -Value "An error occurred while installing drivers. See DISM.log for more details" -Severity 2
-															}
-														}
-														"Recurse" {
-															# Apply drivers recursively
-															$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
-															
-															# Validate driver injection
-															if ($ApplyDriverInvocation -eq 0) {
-																Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
-															}
-															else {
-																Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-															}
-														}
-													}
-												}
-												"OSUpgrade" {
-													# For OSUpgrade, don't attempt to install drivers as this is handled by setup.exe when used together with OSDUpgradeStagedContent
-													Write-CMLogEntry -Value "Driver package content downloaded successfully and located in: $($OSDDriverPackageLocation)" -Severity 1
-													
-													# Set OSDUpgradeStagedContent task sequence variable
-													Write-CMLogEntry -Value "Attempting to set OSDUpgradeStagedContent task sequence variable with value: $($OSDDriverPackageLocation)" -Severity 1
-													$TSEnvironment.Value("OSDUpgradeStagedContent") = "$($OSDDriverPackageLocation)"
-													Write-CMLogEntry -Value "Successfully completed driver package staging process" -Severity 1
-												}
-												"DriverUpdate" {
-													# Apply drivers recursively from downloaded driver package location
-													Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-													$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
-													Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
-												}
-												"PreCache" {
-													# Driver package content downloaded successfully, log output and exit script
-													Write-CMLogEntry -Value "Driver package content successfully downloaded and pre-cached to: $($OSDDriverPackageLocation)" -Severity 1
-												}
-											}
-										}
-										else {
-											Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
-										}
-									}
-									catch [System.Exception] {
-										Write-CMLogEntry -Value "An error occurred while applying drivers (single package match). Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 14
-									}
-								}
-								catch [System.Exception] {
-									Write-CMLogEntry -Value "An error occurred while downloading driver package content (single package match). Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 5
-								}
-							}
-							elseif ($PackageList.Count -ge 2) {
-								# Handle multiple matches when the computer detection method SystemSKU is used
-								if (($ComputerDetectionMethod -like "SystemSKU")) {
-									Write-CMLogEntry -Value "Driver package list contains $($PackageList.Count) matches. Attempting to remove driver packages that do not match the computer model." -Severity 1
-									
-									# Process driver package list in reverse
-									for ($i = ($PackageList.Count - 1); $i -ge 0; $i--) {
-										switch ($ComputerManufacturer) {
-											"Hewlett-Packard" {
-												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
-											}
-											Default {
-												$PackageNameComputerModel = $PackageList[$i].PackageName.Replace($ComputerManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
-											}
-										}
-										if ($PackageNameComputerModel -notmatch $ComputerModel) {
-											Write-CMLogEntry -Value "Detected that the following driver package did not match the computer model: $($PackageList[$i].PackageName)" -Severity 1
-											Write-CMLogEntry -Value "Removing driver package due to inconsistency between computer model value from WMI '$($ComputerModel)' and the translated driver package computer model name '$($PackageNameComputerModel)'" -Severity 1
-											if ($PackageList[$i].OSVersionDetected -eq $false) {
-												$PackageList.RemoveAt($i)
-											}
-										}
-									}
-									
-									# If list is now empty, check log and verify that the driver package name matches what's in WMI
-									if ($PackageList.Count -eq 0) {
-										Write-CMLogEntry -Value "Computer model matching removed all driver packages due to inconsistency with computer name in WMI" -Severity 2
-										Write-CMLogEntry -Value "Ensure that the desired driver package computer model name matches: $($ComputerModel)" -Severity 2
-									}
-								}
-								
-								try {
-									Write-CMLogEntry -Value "Driver package list contains multiple matches, attempting to download driver package content based upon latest package creation date" -Severity 1
-									# Determine matching driver package from array list with vendor specific solutions
-									if (($ComputerManufacturer -like "Hewlett-Packard") -and ($OSName -like "Windows 10")) {
-										Write-CMLogEntry -Value "Vendor specific matching required before downloading content. Attempting to match $($ComputerManufacturer) driver package based on OS build number: $($OSVersion)" -Severity 1
-										$Package = ($PackageList | Where-Object { $_.PackageName -match $OSVersion }) | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
-									}
-									else {
-										$Package = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
-									}
-									
-									# Validate that there's a package available for download
-									if ($Package -ne $null) {
-										# Attempt to download driver package content
-										Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
-										switch ($DeploymentType) {
-											"PreCache" {
-												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
-											}
-											Default {
-												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-											}
-										}
-										
-										try {
-											if ($DownloadInvocation -eq 0) {
-												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
-												Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
-
-												switch ($DeploymentType) {
-													"BareMetal" {
-														# Apply drivers recursively from downloaded driver package location
-														Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-														
-														# Determine driver injection method from parameter input
-														switch ($DriverInstallMode) {
-															"Single" {
-																try {
-																	# Get driver full path and install each driver seperately
-																	$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
-																	if ($DriverINFs -ne $null) {
-																		foreach ($DriverINF in $DriverINFs) {
-																			# Install specific driver
-																			Write-CMLogEntry -Value "Attempting to install driver: $($DriverINF.FullName)" -Severity 1
-																			$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
-																			
-																			# Validate driver injection
-																			if ($ApplyDriverInvocation -eq 0) {
-																				Write-CMLogEntry -Value "Successfully applied driver using dism.exe" -Severity 1
-																			}
-																			else {
-																				Write-CMLogEntry -Value "An error occurred while applying driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																			}
-																		}
-																	}
-																	else {
-																		Write-CMLogEntry -Value "An error occurred while enumerating driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
-																	}
-																}
-																catch [System.Exception] {
-																	Write-CMLogEntry -Value "An error occurred while installing drivers. See DISM.log for more details" -Severity 2
-																}
-															}
-															"Recurse" {
-																# Apply drivers recursively
-																$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
+										"BareMetal" {
+											# Apply drivers recursively from downloaded driver package location
+											Write-CMLogEntry -Value "Fall back driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
+											# Determine driver injection method from parameter input
+											switch ($DriverInstallMode) {
+												"Single" {
+													try {
+														# Get driver full path and install each driver seperately
+														$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
+														if ($DriverINFs -ne $null) {
+															foreach ($DriverINF in $DriverINFs) {
+																# Install specific driver
+																Write-CMLogEntry -Value "Attempting to install fall back driver: $($DriverINF.FullName)" -Severity 1
+																$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
 																
 																# Validate driver injection
 																if ($ApplyDriverInvocation -eq 0) {
-																	Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
+																	Write-CMLogEntry -Value "Successfully applied fall back driver using dism.exe" -Severity 1
 																}
 																else {
-																	Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
+																	Write-CMLogEntry -Value "An error occurred while applying fallback driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
 																}
 															}
 														}
-													}
-													"OSUpgrade" {
-														# For OSUpgrade, don't attempt to install drivers as this is handled by setup.exe when used together with OSDUpgradeStagedContent
-														Write-CMLogEntry -Value "Driver package content downloaded successfully and located in: $($OSDDriverPackageLocation)" -Severity 1
-														
-														# Set OSDUpgradeStagedContent task sequence variable
-														Write-CMLogEntry -Value "Attempting to set OSDUpgradeStagedContent task sequence variable with value: $($OSDDriverPackageLocation)" -Severity 1
-														$TSEnvironment.Value("OSDUpgradeStagedContent") = "$($OSDDriverPackageLocation)"
-														Write-CMLogEntry -Value "Successfully completed driver package staging process" -Severity 1
-													}
-													"DriverUpdate" {
-														# Apply drivers recursively from downloaded driver package location
-														Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-														$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
-														Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
-													}
-													"PreCache" {
-														# Driver package content downloaded successfully, log output and exit script
-														Write-CMLogEntry -Value "Driver package content successfully downloaded and pre-cached to: $($OSDDriverPackageLocation)" -Severity 1
-													}
-												}
-											}
-											else {
-												Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
-											}
-										}
-										catch [System.Exception] {
-											Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 15
-										}
-									}
-									else {
-										Write-CMLogEntry -Value "An error occurred while selecting manufacturer specific driver packages from list, empty list of packages detected" -Severity 3
-										switch ($DeploymentType) {
-											"BareMetal" {
-												exit 21
-											}
-											default {
-												exit 0
-											}
-										}
-									}
-								}
-								catch [System.Exception] {
-									Write-CMLogEntry -Value "An error occurred while downloading driver package content (multiple package matches). Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 6
-								}
-							}
-							else {
-								Write-CMLogEntry -Value "Unable to determine a matching driver package from package list array, unhandled amount of matches" -Severity 2
-								switch ($DeploymentType) {
-									"BareMetal" {
-										exit 7
-									}
-									default {
-										exit 0
-									}
-								}
-							}
-						}
-						else {
-							Write-CMLogEntry -Value "Script has successfully completed DebugMode" -Severity 1
-						}
-					}
-					elseif ($PSBoundParameters.ContainsKey("UseDriverFallback") -eq $true) {
-						Write-CMLogEntry -Value "Driver fallback parameter specified and no matching computer model driver packages found" -Severity 1
-						
-						if ($Packages -ne $null) {
-							# Process packages returned from web service
-							Write-CMLogEntry -Value "Attempting to match a driver fallback package" -Severity 1
-							foreach ($Package in $Packages) {
-								Write-CMLogEntry -Value "Processing $($Package.PackageName)" -Severity 1
-								if (($Package.PackageName -match "Driver Fallback") -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
-									Write-CMLogEntry -Value "Found Driver Fallback package match: $($Package.PackageName)" -Severity 1
-									$PackageList.Add($Package) | Out-Null
-								}
-							}
-							
-							# Process package list if not empty
-							if (-not ($PSCmdLet.ParameterSetName -eq "Debug")) {
-								if ($PackageList.Count -eq 1) {
-									try {
-										# Attempt to download driver fallback package content
-										Write-CMLogEntry -Value "Attempting to download driver fallback package content" -Severity 1
-										$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-										
-										try {
-											if ($DownloadInvocation -eq 0) {
-												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
-												Write-CMLogEntry -Value "Driver files are storage location set to $($OSDDriverPackageLocation)" -Severity 1
-												switch ($DeploymentType) {
-													"BareMetal" {
-														# Apply drivers recursively from downloaded driver package location
-														Write-CMLogEntry -Value "Fall back driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-														# Determine driver injection method from parameter input
-														switch ($DriverInstallMode) {
-															"Single" {
-																try {
-																	# Get driver full path and install each driver seperately
-																	$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
-																	if ($DriverINFs -ne $null) {
-																		foreach ($DriverINF in $DriverINFs) {
-																			# Install specific driver
-																			Write-CMLogEntry -Value "Attempting to install fall back driver: $($DriverINF.FullName)" -Severity 1
-																			$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
-																			
-																			# Validate driver injection
-																			if ($ApplyDriverInvocation -eq 0) {
-																				Write-CMLogEntry -Value "Successfully applied fall back driver using dism.exe" -Severity 1
-																			}
-																			else {
-																				Write-CMLogEntry -Value "An error occurred while applying fallback driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																			}
-																		}
-																	}
-																	else {
-																		Write-CMLogEntry -Value "An error occurred while enumerating fallback driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
-																	}
-																}
-																catch [System.Exception] {
-																	Write-CMLogEntry -Value "An error occurred while installing fallback drivers. See DISM.log for more details" -Severity 2
-																}
-															}
-															"Recurse" {
-																# Apply drivers recursively
-																$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
-																
-																# Validate driver injection
-																if ($ApplyDriverInvocation -eq 0) {
-																	Write-CMLogEntry -Value "Successfully applied fall back drivers using dism.exe" -Severity 1
-																}
-																else {
-																	Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																}
-															}
+														else {
+															Write-CMLogEntry -Value "An error occurred while enumerating fallback driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
 														}
 													}
-													"OSUpgrade" {
-														# Not a supported scenario as of yet
-														Write-CMLogEntry -Value "Fall back driver package mode is not supported for OSUpgrades, bailing out" -Severity 2
+													catch [System.Exception] {
+														Write-CMLogEntry -Value "An error occurred while installing fallback drivers. See DISM.log for more details" -Severity 2
 													}
-													"DriverUpdate" {
-														# Apply drivers recursively from downloaded driver package location
-														Write-CMLogEntry -Value "Driver fallback package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-														$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
+												}
+												"Recurse" {
+													# Apply drivers recursively
+													$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
+													
+													# Validate driver injection
+													if ($ApplyDriverInvocation -eq 0) {
+														Write-CMLogEntry -Value "Successfully applied fall back drivers using dism.exe" -Severity 1
+													}
+													else {
+														Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
 													}
 												}
 											}
-											else {
-												Write-CMLogEntry -Value "Fallback driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 20
-											}
 										}
-										catch [System.Exception] {
-											Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 18
+										"OSUpgrade" {
+											# Not a supported scenario as of yet
+											Write-CMLogEntry -Value "Fall back driver package mode is not supported for OSUpgrades, bailing out" -Severity 2
 										}
-									}
-									catch [System.Exception] {
-										Write-CMLogEntry -Value "An error occurred while downloading fallback driver package content. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 17
+										"DriverUpdate" {
+											# Apply drivers recursively from downloaded driver package location
+											Write-CMLogEntry -Value "Driver fallback package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
+											$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
+										}
 									}
 								}
 								else {
-									Write-CMLogEntry -Value "Either empty or an unsupported count of fallback package content detected" -Severity 3; exit 16
+									Write-CMLogEntry -Value "Fallback driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 20
 								}
 							}
-							else {
-								Write-CMLogEntry -Value "Script has successfully completed debug mode" -Severity 1
+							catch [System.Exception] {
+								Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 18
 							}
 						}
-						else {
-							Write-CMLogEntry -Value "Empty driver package list detected, unable to determine matching driver fallback package" -Severity 2; exit 8
+						catch [System.Exception] {
+							Write-CMLogEntry -Value "An error occurred while downloading fallback driver package content. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 17
 						}
 					}
 					else {
-						Write-CMLogEntry -Value "Computer model detection logic failed for all detected driver packages" -Severity 2; exit 9
+						Write-CMLogEntry -Value "Either empty or an unsupported count of fallback package content detected" -Severity 3; exit 16
 					}
 				}
 				else {
-					Write-CMLogEntry -Value "Computer model and SystemSKU values are either null or empty strings" -Severity 2
+					
 				}
 			}
 			else {
-				Write-CMLogEntry -Value "No packages found. Please populate the driver repository" -Severity 2; exit 10
+				Write-CMLogEntry -Value "Empty driver package list detected, unable to determine matching driver fallback package" -Severity 2; exit 8
 			}
 		}
 		else {
-			Write-CMLogEntry -Value "Unsupported computer platform detected, virtual machines are not supported" -Severity 2; exit 10
+			Write-CMLogEntry -Value "Computer model detection logic failed for all detected driver packages" -Severity 2; exit 9
 		}
 	}
-	else {
-		Write-CMLogEntry -Value "Unable to detect current operating system name from task sequence reference objects" -Severity 2; exit 11
-	}
+	
+
 }
 End {
 	if ($PSCmdLet.ParameterSetName -eq "Execute") {
