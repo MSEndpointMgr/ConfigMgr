@@ -1012,6 +1012,7 @@ Process {
 								$DetectionCounter++
 
 								# Match found for all critiera including OS version
+								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Driver package was created on: $($DriverPackageDetails.DateCreated)" -Severity 1
 								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer for $($DetectionCounter)/$($DetectionMethodsCount) checks, adding to list for post-processing of matched driver packages" -Severity 1
 
 								# Update the SystemSKU value for the custom driver package details object to account for multiple values from original driver package data
@@ -1268,7 +1269,7 @@ Process {
 						# Sort driver packages descending based on OSVersion, DateCreated properties and select the most recently created one
 						$DriverPackageList = $DriverPackageList | Sort-Object -Property OSVersion, DateCreated -Descending | Select-Object -First 1
 
-						Write-CMLogEntry -Value " - Selected driver package with name: $($DriverPackageList[0].PackageName)" -Severity 1
+						Write-CMLogEntry -Value " - Selected driver package '$($DriverPackageList[0].PackageID)' with name: $($DriverPackageList[0].PackageName)" -Severity 1
 						Write-CMLogEntry -Value " - Successfully completed validation after fallback process and detected a single driver package, script execution is allowed to continue" -Severity 1
 						Write-CMLogEntry -Value "[DriverPackageFallback]: Completed driver package OS version fallback matching phase" -Severity 1
 					}
@@ -1304,7 +1305,7 @@ Process {
 						# Sort driver packages descending based on DateCreated property and select the most recently created one
 						$DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
 						
-						Write-CMLogEntry -Value " - Selected driver package with name: $($DriverPackageList[0].PackageName)" -Severity 1
+						Write-CMLogEntry -Value " - Selected driver package '$($DriverPackageList[0].PackageID)' with name: $($DriverPackageList[0].PackageName)" -Severity 1
 						Write-CMLogEntry -Value " - Successfully completed validation with multiple detected driver packages, script execution is allowed to continue" -Severity 1
 					}
 					else {
@@ -1481,7 +1482,7 @@ Process {
 	}
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
-	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-1" -Severity 1
+	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-2" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
 		Write-CMLogEntry -Value " - Apply driver package process initiated in debug mode" -Severity 1
 	}	
