@@ -365,9 +365,6 @@ Process {
 			if ($ReturnCode -eq 0) {
 				Write-CMLogEntry -Value " - Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
 			}
-			else {
-				Write-CMLogEntry -Value " - Package content download process failed with return code $($ReturnCode)" -Severity 2
-			}
 		}
 		catch [System.Exception] {
             Write-CMLogEntry -Value " - An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3
@@ -1482,7 +1479,7 @@ Process {
 	}
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
-	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-2" -Severity 1
+	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-3" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
 		Write-CMLogEntry -Value " - Apply driver package process initiated in debug mode" -Severity 1
 	}	
