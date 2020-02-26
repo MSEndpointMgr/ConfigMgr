@@ -352,8 +352,6 @@ Process {
 		
 		# Invoke download of package content
 		try {
-			Write-CMLogEntry -Value " - Starting package content download process, this might take some time" -Severity 1
-			
 			if ($TSEnvironment.Value("_SMSTSInWinPE") -eq $false) {
 				Write-CMLogEntry -Value " - Starting package content download process (FullOS), this might take some time" -Severity 1
 				$ReturnCode = Invoke-Executable -FilePath (Join-Path -Path $env:windir -ChildPath "CCM\OSDDownloadContent.exe")
@@ -1293,10 +1291,44 @@ Process {
 
 	function Install-DriverPackageContent {
 		param(
-			[parameter(Mandatory = $true, HelpMessage = "....")]
+			[parameter(Mandatory = $true, HelpMessage = "Specify the full local path to the downloaded driver package content.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$ContentLocation
 		)
+		# Detect if downloaded driver package content is a compressed archive that needs to be extracted before drivers are installed
+		$DriverPackageCompressedContent = Join-Path -Path $ContentLocation -ChildPath "DriverPackage.zip"
+		if (Test-Path -Path $DriverPackageCompressedContent) {
+			Write-CMLogEntry -Value " - Downloaded driver package content contains a compressed archive with driver content" -Severity 1
+
+			try {
+				# Expand compressed driver package archive file
+				Write-CMLogEntry -Value " - Attempting to decompress driver package content file: $($DriverPackageCompressedContent)" -Severity 1
+				Write-CMLogEntry -Value " - Decompression destination: $($ContentLocation)" -Severity 1
+				Expand-Archive -Path $DriverPackageCompressedContent -DestinationPath $ContentLocation -Force -ErrorAction Stop
+			}
+			catch [System.Exception] {
+				Write-CMLogEntry -Value " - Failed to decompress driver package content file. Error message: $($_.Exception.Message)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+
+			try {
+				# Remove compressed driver package archive file
+				if (Test-Path -Path $DriverPackageCompressedContent) {
+					Remove-Item -Path $DriverPackageCompressedContent -Force -ErrorAction Stop
+				}				
+			}
+			catch [System.Exception] {
+				Write-CMLogEntry -Value " - Failed to remove compressed driver package content file after decompression. Error message: $($_.Exception.Message)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+		}
+
 		switch ($DeploymentType) {
 			"BareMetal" {
 				# Apply drivers recursively from downloaded driver package location
@@ -1458,10 +1490,6 @@ Process {
 			Write-CMLogEntry -Value " - Script has successfully completed debug mode" -Severity 1
 			Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
 		}
-
-		# TESTING ONLY - REMOVE
-		$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
-		$PSCmdlet.ThrowTerminatingError($ErrorRecord)
     }
     catch [System.Exception] {
         Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process failed, please refer to previous error or warning messages" -Severity 3
