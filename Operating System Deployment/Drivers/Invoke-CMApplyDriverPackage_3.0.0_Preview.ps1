@@ -924,7 +924,8 @@ Process {
 				DateCreated = $DriverPackageItem.PackageCreated
 				Manufacturer = $DriverPackageItem.PackageManufacturer
 				Model = $null
-				SystemSKU = $DriverPackageItem.PackageDescription.Split(":").Replace("(", "").Replace(")", "")[1]
+				SystemSKU = $DriverPackageItem.PackageDescription.Split(":").Replace("(", "").Replace(")", "")[1] ###### ------ This one here is probably causing errors for custom packages matching "driver" in the name, since it doesn't have this info
+				# Should also check that the value on the package is not null or something
 				OSName = $null
 				OSVersion = $null
 				Architecture = $null 
@@ -972,7 +973,7 @@ Process {
 					$ComputerDetectionMethodResult = Confirm-SystemSKU -DriverPackageInput $DriverPackageDetails.SystemSKU -ComputerData $ComputerData
 
 					# Fall back to using computer model as the detection method instead of SystemSKU
-					if ($ComputerDetectionMethodResult -eq $false) {
+					if ($ComputerDetectionMethodResult.Detected -eq $false) {
 						$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
 					}
 				}
@@ -982,7 +983,7 @@ Process {
 				}
 			}
 
-			if ($ComputerDetectionMethodResult -eq $true) {
+			if ($ComputerDetectionMethodResult.Detected -eq $true) {
 				# Increase detection counter since computer detection was successful
 				$DetectionCounter++
 
@@ -1012,6 +1013,13 @@ Process {
 
 								# Match found for all critiera including OS version
 								Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer for $($DetectionCounter)/$($DetectionMethodsCount) checks, adding to list for post-processing of matched driver packages" -Severity 1
+
+								# Update the SystemSKU value for the custom driver package details object to account for multiple values from original driver package data
+								if ($ComputerDetectionMethod -like "SystemSKU") {
+									$DriverPackageDetails.SystemSKU = $ComputerDetectionMethodResult.SystemSKUValue
+								}
+
+								# Add custom driver package details object to list of driver packages for post-processing
 								$DriverPackageList.Add($DriverPackageDetails) | Out-Null
 							}
 							else {
@@ -1021,6 +1029,13 @@ Process {
 						else {
 							# Match found for all critiera except for OS version, assuming here that the vendor does not provide OS version specific driver packages
 							Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing of matched driver packages" -Severity 1
+
+							# Update the SystemSKU value for the custom driver package details object to account for multiple values from original driver package data
+							if ($ComputerDetectionMethod -like "SystemSKU") {
+								$DriverPackageDetails.SystemSKU = $ComputerDetectionMethodResult.SystemSKUValue
+							}
+
+							# Add custom driver package details object to list of driver packages for post-processing
 							$DriverPackageList.Add($DriverPackageDetails) | Out-Null
 						}
 					}
@@ -1119,14 +1134,26 @@ Process {
 			[ValidateNotNullOrEmpty()]
 			[PSCustomObject]$ComputerData
 		)
+		# Construct custom object for return value
+		$ModelDetectionResult = [PSCustomObject]@{
+			Detected = $null
+		}
+
 		if ($DriverPackageInput -like $ComputerData.Model) {
 			# Computer model match found
 			Write-CMLogEntry -Value " - Matched computer model: $($ComputerData.Model)" -Severity 1
-			return $true
+
+			# Set properties for custom object for return value
+			$ModelDetectionResult.Detected = $true
+
+			return $ModelDetectionResult
 		}
 		else {
 			# Computer model match was not found
-			return $false
+			# Set properties for custom object for return value
+			$ModelDetectionResult.Detected = $false
+
+			return $ModelDetectionResult
 		}
 	}
 
@@ -1149,40 +1176,78 @@ Process {
 			$SystemSKUDelimiter = ";"
 		}
 
+		# Construct custom object for return value
+		$SystemSKUDetectionResult = [PSCustomObject]@{
+			Detected = $null
+			SystemSKUValue = $null
+		}
+
 		# Attempt to determine if the driver package input matches with the computer data input and account for multiple SystemSKU's by separating them with the detected delimiter
 		if (-not([string]::IsNullOrEmpty($SystemSKUDelimiter))) {
+			# Construct table for keeping track of matched SystemSKU items
+			$SystemSKUTable = @{}
+
 			# Attempt to match for each SystemSKU item based on computer data input
-			foreach ($SystemSKUItem in ($ComputerData.SystemSKU -split $SystemSKUDelimiter)) {
-				if ($DriverPackageInput -match $SystemSKUItem) {
-					$SystemSKUDetectionResult = $true
+			foreach ($SystemSKUItem in ($DriverPackageInput -split $SystemSKUDelimiter)) {
+				if ($ComputerData.SystemSKU -match $SystemSKUItem) {
+					# Add key value pair with match success
+					$SystemSKUTable.Add($SystemSKUItem, $true)
+
+					# Set custom object property with SystemSKU value that was matched on the detection result object
+					$SystemSKUDetectionResult.SystemSKUValue = $SystemSKUItem
 				}
 				else {
-					$SystemSKUDetectionResult = $false	
+					# Add key value pair with match failure
+					$SystemSKUTable.Add($SystemSKUItem, $false)
 				}
 			}
-			if ($SystemSKUDetectionResult -eq $true) {
+
+			# Check if table contains a matched SystemSKU
+			if ($SystemSKUTable.Values -contains $true) {
 				# SystemSKU match found based upon multiple items detected in computer data input
 				Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.SystemSKU)" -Severity 1
-				return $true
+
+				# Set custom object property that SystemSKU value that was matched on the detection result object
+				$SystemSKUDetectionResult.Detected = $true
+				
+				return $SystemSKUDetectionResult
 			}
 			else {
 				# SystemSKU match was not found based upon multiple items detected in computer data input
-				return $false
+				# Set properties for custom object for return value
+				$SystemSKUDetectionResult.SystemSKUValue = ""
+				$SystemSKUDetectionResult.Detected = $false
+
+				return $SystemSKUDetectionResult
 			}
 		}
 		elseif ($DriverPackageInput -match $ComputerData.SystemSKU) {
 			# SystemSKU match found based upon single item detected in computer data input
 			Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.SystemSKU)" -Severity 1
-			return $true
+
+			# Set properties for custom object for return value
+			$SystemSKUDetectionResult.SystemSKUValue = $ComputerData.SystemSKU
+			$SystemSKUDetectionResult.Detected = $true
+
+			return $SystemSKUDetectionResult
 		}
 		elseif ((-not([string]::IsNullOrEmpty($ComputerData.FallbackSKU))) -and ($DriverPackageInput -match $ComputerData.FallbackSKU)) {
 			# SystemSKU match found using FallbackSKU value using detection method OEMString, this should only be valid for Dell
 			Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.FallbackSKU)" -Severity 1
-			return $true
+
+			# Set properties for custom object for return value
+			$SystemSKUDetectionResult.SystemSKUValue = $ComputerData.FallbackSKU
+			$SystemSKUDetectionResult.Detected = $true
+			
+			return $SystemSKUDetectionResult
 		}
 		else {
 			# None of the above methods worked to match SystemSKU from driver package input with computer data input
-			return $false
+			# Set properties for custom object for return value
+			$SystemSKUDetectionResult.SystemSKUValue = ""
+			$SystemSKUDetectionResult.Detected = $false
+
+			return $SystemSKUDetectionResult
 		}
 	}
 
@@ -1246,6 +1311,10 @@ Process {
 						# This should not be possible, but added to handle output to log file for user to reach out to the developers
 						Write-CMLogEntry -Value " - WARNING: Computer detection method is currently '$($ComputerDetectionMethod)', and multiple packages have been matched but with different SystemSKU value" -Severity 2
 						Write-CMLogEntry -Value " - WARNING: This should not be a possible scenario, please reach out to the developers of this script" -Severity 2
+
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
 					}
 				}
 				else {
@@ -1412,6 +1481,7 @@ Process {
 	}
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
+	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-1" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
 		Write-CMLogEntry -Value " - Apply driver package process initiated in debug mode" -Severity 1
 	}	
