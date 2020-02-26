@@ -1026,6 +1026,7 @@ Process {
 						}
 						else {
 							# Match found for all critiera except for OS version, assuming here that the vendor does not provide OS version specific driver packages
+							Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Driver package was created on: $($DriverPackageDetails.DateCreated)" -Severity 1
 							Write-CMLogEntry -Value "[DriverPackage:$($DriverPackageItem.PackageID)]: Match found between driver package and computer, adding to list for post-processing of matched driver packages" -Severity 1
 
 							# Update the SystemSKU value for the custom driver package details object to account for multiple values from original driver package data
@@ -1479,7 +1480,7 @@ Process {
 	}
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
-	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-3" -Severity 1
+	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-4" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
 		Write-CMLogEntry -Value " - Apply driver package process initiated in debug mode" -Severity 1
 	}	
