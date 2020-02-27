@@ -1265,7 +1265,7 @@ Process {
 
 					if ($DriverPackageList.Count -ge 1) {
 						# Sort driver packages descending based on OSVersion, DateCreated properties and select the most recently created one
-						$DriverPackageList = $DriverPackageList | Sort-Object -Property OSVersion, DateCreated -Descending | Select-Object -First 1
+						$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property OSVersion, DateCreated -Descending | Select-Object -First 1
 
 						Write-CMLogEntry -Value " - Selected driver package '$($DriverPackageList[0].PackageID)' with name: $($DriverPackageList[0].PackageName)" -Severity 1
 						Write-CMLogEntry -Value " - Successfully completed validation after fallback process and detected a single driver package, script execution is allowed to continue" -Severity 1
@@ -1301,7 +1301,7 @@ Process {
 						Write-CMLogEntry -Value " - NOTICE: Validation process will automatically choose the most recently created driver package, even if it means that the computer model names may not match" -Severity 1
 	
 						# Sort driver packages descending based on DateCreated property and select the most recently created one
-						$DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
+						$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
 						
 						Write-CMLogEntry -Value " - Selected driver package '$($DriverPackageList[0].PackageID)' with name: $($DriverPackageList[0].PackageName)" -Severity 1
 						Write-CMLogEntry -Value " - Successfully completed validation with multiple detected driver packages, script execution is allowed to continue" -Severity 1
@@ -1321,7 +1321,7 @@ Process {
 					Write-CMLogEntry -Value " - NOTICE: Validation process will automatically choose the most recently created driver package by the DateCreated property" -Severity 1
 
 					# Sort driver packages descending based on DateCreated property and select the most recently created one
-					$DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
+					$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
 				}
 			}
 		}
