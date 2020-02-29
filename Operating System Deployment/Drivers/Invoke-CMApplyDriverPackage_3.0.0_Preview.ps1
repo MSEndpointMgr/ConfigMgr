@@ -24,7 +24,7 @@
 	Define the operational mode, either Production or Pilot, for when calling ConfigMgr WebService to only return objects matching the selected operational mode.
 
 .PARAMETER UseDriverFallback
-	Specify if the script is to be used with a driver fallback package.
+	Specify if the script is to be used with a driver fallback package when a driver package for SystemSKU or computer model could not be detected.
 
 .PARAMETER DriverInstallMode
 	Specify whether to install drivers using DISM.exe with recurse option or spawn a new process for each driver.
@@ -161,7 +161,7 @@ param (
 	[ValidateSet("Production", "Pilot")]
 	[string]$OperationalMode = "Production",
 	
-	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify if the script is to be used with a driver fallback package.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify if the script is to be used with a driver fallback package when a driver package for SystemSKU or computer model could not be detected.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[switch]$UseDriverFallback,
 	
@@ -841,6 +841,22 @@ Process {
             $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
             $PSCmdlet.ThrowTerminatingError($ErrorRecord)
         }
+	}
+	
+	function Get-OperatingSystemVersion {
+		if ($DeploymentType -like "DriverUpdate") {
+			$OperatingSystemVersion = Get-WmiObject -Class "Win32_OperatingSystem" | Select-Object -ExpandProperty "Version"
+			if ($OperatingSystemVersion -like "10.0.*") {
+				Write-CMLogEntry -Value " - Supported operating system version currently running detected, script execution allowed to continue" -Severity 1
+			}
+			else {
+				Write-CMLogEntry -Value " - Unsupported operating system version detected, this script is only supported on Windows 10 and above" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+		}
     }
 
     function Test-ComputerDetails {
@@ -909,8 +925,13 @@ Process {
 		# Sort all driver package objects by package name property
 		$DriverPackages = $DriverPackage | Sort-Object -Property PackageName
 
-		Write-CMLogEntry -Value "- Limiting driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
+		# Filter out driver packages that does not match with the vendor
+		Write-CMLogEntry -Value "- Filtering driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
 		$DriverPackages = $DriverPackages | Where-Object { $_.PackageManufacturer -like $ComputerData.Manufacturer }
+
+		# Filter out driver packages that does not contain any value in the package description
+		Write-CMLogEntry -Value "- Filtering driver package results to packages that have details added to the package description field" -Severity 1
+		$DriverPackages = $DriverPackages | Where-Object { $_.PackageDescription -ne ([string]::IsNullOrEmpty($_.PackageDescription)) }
 
 		foreach ($DriverPackageItem in $DriverPackages) {
 			# Construct custom object to hold values for current driver package properties used for matching with current computer details
@@ -921,8 +942,7 @@ Process {
 				DateCreated = $DriverPackageItem.PackageCreated
 				Manufacturer = $DriverPackageItem.PackageManufacturer
 				Model = $null
-				SystemSKU = $DriverPackageItem.PackageDescription.Split(":").Replace("(", "").Replace(")", "")[1] ###### ------ This one here is probably causing errors for custom packages matching "driver" in the name, since it doesn't have this info
-				# Should also check that the value on the package is not null or something
+				SystemSKU = $DriverPackageItem.PackageDescription.Split(":").Replace("(", "").Replace(")", "")[1]
 				OSName = $null
 				OSVersion = $null
 				Architecture = $null 
@@ -934,7 +954,7 @@ Process {
 				"Hewlett-Packard" {
 					$DriverPackageDetails.Model = $DriverPackageItem.PackageName.Replace("Hewlett-Packard", "HP").Replace(" - ", ":").Split(":").Trim()[1]
 				}
-				Default {
+				default {
 					$DriverPackageDetails.Model = $DriverPackageItem.PackageName.Replace($DriverPackageItem.PackageManufacturer, "").Replace(" - ", ":").Split(":").Trim()[1]
 				}
 			}
@@ -1039,6 +1059,105 @@ Process {
 						}
 					}
 				}
+			}
+		}
+	}
+
+	function Confirm-FallbackDriverPackage {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer details object from Get-ComputerDetails function.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$ComputerData,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the OS Image details object from Get-OSImageDetails function.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the web service object returned from Connect-WebService function.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$WebService
+		)
+		if ($Script:DriverPackageList.Count -eq 0) {
+			Write-CMLogEntry -Value " - Previous validation process failed to match against a specific driver package, starting fallback driver package matching process" -Severity 1
+			
+			#### Per vendor fallback packages? new param to specify the name to match per vendor
+
+			try {
+				# Attempt to retrieve fallback driver packages from ConfigMgr WebService
+				$FallbackDriverPackages = $WebService.GetCMPackage($SecretKey, "Driver Fallback Package") | Where-Object { $_.PackageName -notmatch "Pilot" -and $_.PackageName -notmatch "Retired" }
+			
+				if ($FallbackDriverPackages -ne $null) {
+					Write-CMLogEntry -Value " - Retrieved a total of '$(($FallbackDriverPackages | Measure-Object).Count)' fallback driver packages from web service matching 'Driver Fallback Package' within the name" -Severity 1
+
+					# Sort all fallback driver package objects by package name property
+					$FallbackDriverPackages = $FallbackDriverPackages | Sort-Object -Property PackageName
+
+					# Filter out driver packages that does not match with the vendor
+					Write-CMLogEntry -Value "- Filtering fallback driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
+					$FallbackDriverPackages = $FallbackDriverPackages | Where-Object { $_.PackageManufacturer -like $ComputerData.Manufacturer }
+
+					foreach ($DriverPackageItem in $FallbackDriverPackages) {
+						# Construct custom object to hold values for current driver package properties used for matching with current computer details
+						$DriverPackageDetails = [PSCustomObject]@{
+							PackageName = $DriverPackageItem.PackageName
+							PackageID = $DriverPackageItem.PackageID
+							DateCreated = $DriverPackageItem.PackageCreated
+							Manufacturer = $DriverPackageItem.PackageManufacturer
+							OSName = $null
+							Architecture = $null 
+						}
+
+						# Add driver package OS architecture details to custom driver package details object
+						if ($DriverPackageItem.PackageName -match "^.*(?<Architecture>(x86|x64)).*") {
+							$DriverPackageDetails.Architecture = $Matches.Architecture
+						}
+
+						# Add driver package OS name details to custom driver package details object
+						if ($DriverPackageItem.PackageName -match "^.*Windows.*(?<OSName>(10)).*") {
+							$DriverPackageDetails.OSName = -join@("Windows ", $Matches.OSName)
+						}
+
+						# Set counters for logging output of how many matching checks was successfull
+						$DetectionCounter = 0
+						$DetectionMethodsCount = 2
+
+						Write-CMLogEntry -Value "[DriverPackageFallback:$($DriverPackageItem.PackageID)]: Processing fallback driver package with $($DetectionMethodsCount) detection methods: $($DriverPackageItem.PackageName)" -Severity 1
+
+						# Attempt to match against OS name
+						$OSNameDetectionResult = Confirm-OSName -DriverPackageInput $DriverPackageDetails.OSName -OSImageData $OSImageData
+						if ($OSNameDetectionResult -eq $true) {
+							# Increase detection counter since OS name detection was successful
+							$DetectionCounter++
+		
+							$OSArchitectureDetectionResult = Confirm-Architecture -DriverPackageInput $DriverPackageDetails.Architecture -OSImageData $OSImageData
+							if ($OSArchitectureDetectionResult -eq $true) {
+								# Increase detection counter since OS architecture detection was successful
+								$DetectionCounter++
+
+								# Match found for all critiera including OS version
+								Write-CMLogEntry -Value "[DriverPackageFallback:$($DriverPackageItem.PackageID)]: Fallback driver package was created on: $($DriverPackageDetails.DateCreated)" -Severity 1
+								Write-CMLogEntry -Value "[DriverPackageFallback:$($DriverPackageItem.PackageID)]: Match found for fallback driver package with $($DetectionCounter)/$($DetectionMethodsCount) checks, adding to list for post-processing of matched fallback driver packages" -Severity 1
+
+								# Add custom driver package details object to list of fallback driver packages for post-processing
+								$DriverPackageList.Add($DriverPackageDetails) | Out-Null
+							}
+						}
+					}
+				}
+				else {
+					Write-CMLogEntry -Value " - Retrieved a total of '0' fallback driver packages from web service matching operational mode: $($OperationalMode)" -Severity 3
+	
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}
+			catch [System.Exception] {
+				Write-CMLogEntry -Value " - An error occurred while calling ConfigMgr WebService for a list of available fallback driver packages. Error message: $($_.Exception.Message)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
 			}
 		}
 	}
@@ -1272,24 +1391,34 @@ Process {
 						Write-CMLogEntry -Value "[DriverPackageFallback]: Completed driver package OS version fallback matching phase" -Severity 1
 					}
 					else {
-						Write-CMLogEntry -Value " - Validation after fallback process failed with empty list of matched driver packages, script execution will be terminated" -Severity 3
+						if ($Script:PSBoundParameters["UseDriverFallback"]) {
+							Write-CMLogEntry -Value " - Validation process detected an empty list of matched driver packages, however the UseDriverFallback parameter was specified" -Severity 1
+						}
+						else {
+							Write-CMLogEntry -Value " - Validation after fallback process failed with empty list of matched driver packages, script execution will be terminated" -Severity 3
+
+							# Throw terminating error
+							$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+							$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+						}
+					}
+				}
+				else {
+					if ($Script:PSBoundParameters["UseDriverFallback"]) {
+						Write-CMLogEntry -Value " - Validation process detected an empty list of matched driver packages, however the UseDriverFallback parameter was specified" -Severity 1
+					}
+					else {
+						Write-CMLogEntry -Value " - Validation failed with empty list of matched driver packages, script execution will be terminated" -Severity 3
 
 						# Throw terminating error
 						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
 						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
 					}
 				}
-				else {
-					Write-CMLogEntry -Value " - Validation failed with empty list of matched driver packages, script execution will be terminated" -Severity 3
-
-					# Throw terminating error
-					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
-					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
-				}
 			}
 			1 {
 				Write-CMLogEntry -Value " - Amount of driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
-				Write-CMLogEntry -Value " - Successfully completed validation a single driver package, script execution is allowed to continue" -Severity 1
+				Write-CMLogEntry -Value " - Successfully completed validation with a single driver package, script execution is allowed to continue" -Severity 1
 			}
 			default {
 				Write-CMLogEntry -Value " - Amount of driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
@@ -1323,6 +1452,30 @@ Process {
 					# Sort driver packages descending based on DateCreated property and select the most recently created one
 					$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
 				}
+			}
+		}
+	}
+
+	function Confirm-FallbackDriverPackageList {
+		switch ($DriverPackageList.Count) {
+			0 {
+				Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 3
+				Write-CMLogEntry -Value " - Validation failed with empty list of matched fallback driver packages, script execution will be terminated" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+			1 {
+				Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
+				Write-CMLogEntry -Value " - Successfully completed validation with a single driver package, script execution is allowed to continue" -Severity 1
+			}
+			default {
+				Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
+				Write-CMLogEntry -Value " - NOTICE: Multiple fallback driver packages have been matched, validation process will automatically choose the most recently created fallback driver package by the DateCreated property" -Severity 1
+
+				# Sort driver packages descending based on DateCreated property and select the most recently created one
+				$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
 			}
 		}
 	}
@@ -1480,7 +1633,6 @@ Process {
 	}
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
-	Write-CMLogEntry -Value " - DEBUG: Script version: 3.0.0-5" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
 		Write-CMLogEntry -Value " - Apply driver package process initiated in debug mode" -Severity 1
 	}	
@@ -1497,7 +1649,10 @@ Process {
         Write-CMLogEntry -Value "[PrerequisiteChecker]: Starting environment prerequisite checker" -Severity 1
 
         # Determine if running on supported computer system type
-        Get-ComputerSystemType
+		Get-ComputerSystemType
+		
+		# Determine if running on supported operating system version
+		Get-OperatingSystemVersion
 
 		# Determine computer manufacturer, model, SystemSKU and FallbackSKU
 		$ComputerData = Get-ComputerData
@@ -1542,6 +1697,23 @@ Process {
 
 		# At this point, the code below here is not allowed to be executed in debug mode, as it requires access to the Microsoft.SMS.TSEnvironment COM object
 		if ($PSCmdLet.ParameterSetName -like "Execute") {
+			# Handle UseDriverFallback parameter if it was passed on the command line and attempt to detect if there's any available fallback packages
+			# This function will only run in the case that the parameter UseDriverFallback was specified and if the $DriverPackageList is empty at the point of execution
+			if ($PSBoundParameters["UseDriverFallback"]) {
+				Write-CMLogEntry -Value "[DriverPackageFallback]: Starting fallback driver package detection phase" -Severity 1
+	
+				# Match detected fallback driver packages from web service call with computer details and OS image details
+				Confirm-FallbackDriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -WebService $WebService
+	
+				Write-CMLogEntry -Value "[DriverPackageFallback]: Completed fallback driver package detection phase" -Severity 1
+				Write-CMLogEntry -Value "[DriverPackageFallbackValidation]: Starting fallback driver package validation phase" -Severity 1
+	
+				# Validate that at least one fallback driver package was matched against computer data
+				Confirm-FallbackDriverPackageList
+	
+				Write-CMLogEntry -Value "[DriverPackageFallbackValidation]: Completed fallback driver package validation phase" -Severity 1				
+			}
+
 			Write-CMLogEntry -Value "[DriverPackageDownload]: Starting driver package download phase" -Severity 1
 
 			# Attempt to download the matched driver package content files from distribution point
@@ -1561,128 +1733,21 @@ Process {
 		}
     }
     catch [System.Exception] {
-        Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process failed, please refer to previous error or warning messages" -Severity 3
+		Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process failed, please refer to previous error or warning messages" -Severity 3
+		
+		# Main try-catch block was triggered, this should cause the script to fail with exit code 1
+		exit 1
 	}
 
+	# If script has made it this far, it's a success
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
 	
 
-    ##### END for 3.0.0 Preview
-
-	if ($EmptyVariable -like "EMPTY") {
-		if ($PSBoundParameters.ContainsKey("UseDriverFallback") -eq $true) {
-			Write-CMLogEntry -Value "Driver fallback parameter specified and no matching computer model driver packages found" -Severity 1
-			
-			if ($Packages -ne $null) {
-				# Process packages returned from web service
-				Write-CMLogEntry -Value "Attempting to match a driver fallback package" -Severity 1
-				foreach ($Package in $Packages) {
-					Write-CMLogEntry -Value "Processing $($Package.PackageName)" -Severity 1
-					if (($Package.PackageName -match "Driver Fallback") -and ($Package.PackageName -match $OSName) -and ($Package.PackageName -match $OSImageArchitecture)) {
-						Write-CMLogEntry -Value "Found Driver Fallback package match: $($Package.PackageName)" -Severity 1
-						$PackageList.Add($Package) | Out-Null
-					}
-				}
-				
-				# Process package list if not empty
-				if (-not ($PSCmdLet.ParameterSetName -eq "Debug")) {
-					if ($PackageList.Count -eq 1) {
-						try {
-							# Attempt to download driver fallback package content
-							Write-CMLogEntry -Value "Attempting to download driver fallback package content" -Severity 1
-							$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
-							
-							try {
-								if ($DownloadInvocation -eq 0) {
-									$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
-									Write-CMLogEntry -Value "Driver files are storage location set to $($OSDDriverPackageLocation)" -Severity 1
-									switch ($DeploymentType) {
-										"BareMetal" {
-											# Apply drivers recursively from downloaded driver package location
-											Write-CMLogEntry -Value "Fall back driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-											# Determine driver injection method from parameter input
-											switch ($DriverInstallMode) {
-												"Single" {
-													try {
-														# Get driver full path and install each driver seperately
-														$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
-														if ($DriverINFs -ne $null) {
-															foreach ($DriverINF in $DriverINFs) {
-																# Install specific driver
-																Write-CMLogEntry -Value "Attempting to install fall back driver: $($DriverINF.FullName)" -Severity 1
-																$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
-																
-																# Validate driver injection
-																if ($ApplyDriverInvocation -eq 0) {
-																	Write-CMLogEntry -Value "Successfully applied fall back driver using dism.exe" -Severity 1
-																}
-																else {
-																	Write-CMLogEntry -Value "An error occurred while applying fallback driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																}
-															}
-														}
-														else {
-															Write-CMLogEntry -Value "An error occurred while enumerating fallback driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
-														}
-													}
-													catch [System.Exception] {
-														Write-CMLogEntry -Value "An error occurred while installing fallback drivers. See DISM.log for more details" -Severity 2
-													}
-												}
-												"Recurse" {
-													# Apply drivers recursively
-													$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
-													
-													# Validate driver injection
-													if ($ApplyDriverInvocation -eq 0) {
-														Write-CMLogEntry -Value "Successfully applied fall back drivers using dism.exe" -Severity 1
-													}
-													else {
-														Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-													}
-												}
-											}
-										}
-										"OSUpgrade" {
-											# Not a supported scenario as of yet
-											Write-CMLogEntry -Value "Fall back driver package mode is not supported for OSUpgrades, bailing out" -Severity 2
-										}
-										"DriverUpdate" {
-											# Apply drivers recursively from downloaded driver package location
-											Write-CMLogEntry -Value "Driver fallback package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-											$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
-										}
-									}
-								}
-								else {
-									Write-CMLogEntry -Value "Fallback driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 20
-								}
-							}
-							catch [System.Exception] {
-								Write-CMLogEntry -Value "An error occurred while applying fallback drivers. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 18
-							}
-						}
-						catch [System.Exception] {
-							Write-CMLogEntry -Value "An error occurred while downloading fallback driver package content. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 17
-						}
-					}
-					else {
-						Write-CMLogEntry -Value "Either empty or an unsupported count of fallback package content detected" -Severity 3; exit 16
-					}
-				}
-				else {
-					
-				}
-			}
-			else {
-				Write-CMLogEntry -Value "Empty driver package list detected, unable to determine matching driver fallback package" -Severity 2; exit 8
-			}
-		}
-		else {
-			Write-CMLogEntry -Value "Computer model detection logic failed for all detected driver packages" -Severity 2; exit 9
-		}
-	}
+	##### END for 3.0.0 Preview
 	
+	### NOTES
+	# - Add support for HP's driver software like hotkey etc
+
 
 }
 End {
