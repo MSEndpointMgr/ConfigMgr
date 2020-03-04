@@ -1084,10 +1084,8 @@ Process {
 			[PSCustomObject]$WebService
 		)
 		if ($Script:DriverPackageList.Count -eq 0) {
-			Write-CMLogEntry -Value " - Previous validation process failed to match against a specific driver package, starting fallback driver package matching process" -Severity 1
+			Write-CMLogEntry -Value " - Previous validation process could not find a match for a specific driver package, starting fallback driver package matching process" -Severity 1
 			
-			#### Per vendor fallback packages? new param to specify the name to match per vendor
-
 			try {
 				# Attempt to retrieve fallback driver packages from ConfigMgr WebService
 				$FallbackDriverPackages = $WebService.GetCMPackage($SecretKey, "Driver Fallback Package") | Where-Object { $_.PackageName -notmatch "Pilot" -and $_.PackageName -notmatch "Retired" }
