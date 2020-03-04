@@ -998,6 +998,9 @@ Process {
 					# Fall back to using computer model as the detection method instead of SystemSKU
 					if ($ComputerDetectionMethodResult.Detected -eq $false) {
 						$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
+
+						# Update value for computer detection method variable since fallback occurred
+						$Script:ComputerDetectionMethod = "ComputerModel"
 					}
 				}
 				"ComputerModel" {
@@ -1097,7 +1100,7 @@ Process {
 					$FallbackDriverPackages = $FallbackDriverPackages | Sort-Object -Property PackageName
 
 					# Filter out driver packages that does not match with the vendor
-					Write-CMLogEntry -Value "- Filtering fallback driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
+					Write-CMLogEntry -Value " - Filtering fallback driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
 					$FallbackDriverPackages = $FallbackDriverPackages | Where-Object { $_.PackageManufacturer -like $ComputerData.Manufacturer }
 
 					foreach ($DriverPackageItem in $FallbackDriverPackages) {
@@ -1165,7 +1168,8 @@ Process {
 			}
 		}
 		else {
-			Write-CMLogEntry -Value "DEBUG - Confirm-FallbackDriverPackage function: DriverPackageList.Count was not 0" -Severity 1
+			Write-CMLogEntry -Value " - Driver fallback process will not continue since driver packages matching computer model detection logic of '$($ComputerDetectionMethod)' was found" -Severity 1
+			$Script:SkipFallbackDriverPackageValidation = $true
 		}
 	}
 
@@ -1458,32 +1462,39 @@ Process {
 
 					# Sort driver packages descending based on DateCreated property and select the most recently created one
 					$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
+					Write-CMLogEntry -Value " - Selected driver package '$($DriverPackageList[0].PackageID)' with name: $($DriverPackageList[0].PackageName)" -Severity 1
 				}
 			}
 		}
 	}
 
 	function Confirm-FallbackDriverPackageList {
-		switch ($DriverPackageList.Count) {
-			0 {
-				Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 3
-				Write-CMLogEntry -Value " - Validation failed with empty list of matched fallback driver packages, script execution will be terminated" -Severity 3
-
-				# Throw terminating error
-				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
-				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+		if ($Script:SkipFallbackDriverPackageValidation -eq $false) {
+			switch ($DriverPackageList.Count) {
+				0 {
+					Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 3
+					Write-CMLogEntry -Value " - Validation failed with empty list of matched fallback driver packages, script execution will be terminated" -Severity 3
+	
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+				1 {
+					Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
+					Write-CMLogEntry -Value " - Successfully completed validation with a single driver package, script execution is allowed to continue" -Severity 1
+				}
+				default {
+					Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
+					Write-CMLogEntry -Value " - NOTICE: Multiple fallback driver packages have been matched, validation process will automatically choose the most recently created fallback driver package by the DateCreated property" -Severity 1
+	
+					# Sort driver packages descending based on DateCreated property and select the most recently created one
+					$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
+					Write-CMLogEntry -Value " - Selected fallback driver package '$($DriverPackageList[0].PackageID)' with name: $($DriverPackageList[0].PackageName)" -Severity 1
+				}
 			}
-			1 {
-				Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
-				Write-CMLogEntry -Value " - Successfully completed validation with a single driver package, script execution is allowed to continue" -Severity 1
-			}
-			default {
-				Write-CMLogEntry -Value " - Amount of fallback driver packages detected by validation process: $($DriverPackageList.Count)" -Severity 1
-				Write-CMLogEntry -Value " - NOTICE: Multiple fallback driver packages have been matched, validation process will automatically choose the most recently created fallback driver package by the DateCreated property" -Severity 1
-
-				# Sort driver packages descending based on DateCreated property and select the most recently created one
-				$Script:DriverPackageList = $DriverPackageList | Sort-Object -Property DateCreated -Descending | Select-Object -First 1
-			}
+		}
+		else {
+			Write-CMLogEntry -Value " - Fallback driver package validation process is being skipped since 'SkipFallbackDriverPackageValidation' variable was set to True" -Severity 1
 		}
 	}
 
@@ -1642,7 +1653,7 @@ Process {
 	##
 	#
 	# DEBUG ONLY
-	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-8" -Severity 1
+	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-9" -Severity 1
 	#
 	##
 
@@ -1659,6 +1670,9 @@ Process {
 
     # Construct array list for matched drivers packages
 	$DriverPackageList = New-Object -TypeName "System.Collections.ArrayList"
+
+	# Set initial values that control whether some functions should be executed or not
+	$SkipFallbackDriverPackageValidation = $false
 
     try {
         Write-CMLogEntry -Value "[PrerequisiteChecker]: Starting environment prerequisite checker" -Severity 1
@@ -1744,7 +1758,6 @@ Process {
 		}
 		else {
 			Write-CMLogEntry -Value " - Script has successfully completed debug mode" -Severity 1
-			Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
 		}
     }
     catch [System.Exception] {
@@ -1754,15 +1767,10 @@ Process {
 		exit 1
 	}
 
-	# If script has made it this far, it's a success
-	Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
-	
-
 	##### END for 3.0.0 Preview
 	
 	### NOTES
 	# - Add support for HP's driver software like hotkey etc
-
 
 }
 End {
@@ -1770,4 +1778,7 @@ End {
 		# Reset OSDDownloadContent.exe dependant variables for further use of the task sequence step
 		Invoke-CMResetDownloadContentVariables
 	}
+
+	# Write final output to log file
+	Write-CMLogEntry -Value "[ApplyDriverPackage]: Completed Apply Driver Package process" -Severity 1
 }
