@@ -1166,6 +1166,9 @@ Process {
 				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
 			}
 		}
+		else {
+			Write-CMLogEntry -Value "DEBUG - Confirm-FallbackDriverPackage function: DriverPackageList.Count was not 0" -Severity 1
+		}
 	}
 
 	function Confirm-OSVersion {
@@ -1708,26 +1711,26 @@ Process {
 		Confirm-DriverPackageList
 
 		Write-CMLogEntry -Value "[DriverPackageValidation]: Completed driver package validation phase" -Severity 1
+		
+		# Handle UseDriverFallback parameter if it was passed on the command line and attempt to detect if there's any available fallback packages
+		# This function will only run in the case that the parameter UseDriverFallback was specified and if the $DriverPackageList is empty at the point of execution
+		if ($PSBoundParameters["UseDriverFallback"]) {
+			Write-CMLogEntry -Value "[DriverPackageFallback]: Starting fallback driver package detection phase" -Severity 1
+
+			# Match detected fallback driver packages from web service call with computer details and OS image details
+			Confirm-FallbackDriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -WebService $WebService
+
+			Write-CMLogEntry -Value "[DriverPackageFallback]: Completed fallback driver package detection phase" -Severity 1
+			Write-CMLogEntry -Value "[DriverPackageFallbackValidation]: Starting fallback driver package validation phase" -Severity 1
+
+			# Validate that at least one fallback driver package was matched against computer data
+			Confirm-FallbackDriverPackageList
+
+			Write-CMLogEntry -Value "[DriverPackageFallbackValidation]: Completed fallback driver package validation phase" -Severity 1				
+		}		
 
 		# At this point, the code below here is not allowed to be executed in debug mode, as it requires access to the Microsoft.SMS.TSEnvironment COM object
 		if ($PSCmdLet.ParameterSetName -like "Execute") {
-			# Handle UseDriverFallback parameter if it was passed on the command line and attempt to detect if there's any available fallback packages
-			# This function will only run in the case that the parameter UseDriverFallback was specified and if the $DriverPackageList is empty at the point of execution
-			if ($PSBoundParameters["UseDriverFallback"]) {
-				Write-CMLogEntry -Value "[DriverPackageFallback]: Starting fallback driver package detection phase" -Severity 1
-	
-				# Match detected fallback driver packages from web service call with computer details and OS image details
-				Confirm-FallbackDriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -WebService $WebService
-	
-				Write-CMLogEntry -Value "[DriverPackageFallback]: Completed fallback driver package detection phase" -Severity 1
-				Write-CMLogEntry -Value "[DriverPackageFallbackValidation]: Starting fallback driver package validation phase" -Severity 1
-	
-				# Validate that at least one fallback driver package was matched against computer data
-				Confirm-FallbackDriverPackageList
-	
-				Write-CMLogEntry -Value "[DriverPackageFallbackValidation]: Completed fallback driver package validation phase" -Severity 1				
-			}
-
 			Write-CMLogEntry -Value "[DriverPackageDownload]: Starting driver package download phase" -Severity 1
 
 			# Attempt to download the matched driver package content files from distribution point
