@@ -1642,7 +1642,7 @@ Process {
 	##
 	#
 	# DEBUG ONLY
-	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-7" -Severity 1
+	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-8" -Severity 1
 	#
 	##
 
