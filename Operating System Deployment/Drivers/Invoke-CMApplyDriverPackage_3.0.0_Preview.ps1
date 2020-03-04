@@ -924,14 +924,20 @@ Process {
 		)
 		# Sort all driver package objects by package name property
 		$DriverPackages = $DriverPackage | Sort-Object -Property PackageName
+		$DriverPackagesCount = ($DriverPackages | Measure-Object).Count
+		Write-CMLogEntry -Value " - Initial count of driver packages before starting filtering process: $($DriverPackagesCount)" -Severity 1
 
 		# Filter out driver packages that does not match with the vendor
-		Write-CMLogEntry -Value "- Filtering driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
+		Write-CMLogEntry -Value " - Filtering driver package results to detected computer manufacturer: $($ComputerData.Manufacturer)" -Severity 1
 		$DriverPackages = $DriverPackages | Where-Object { $_.PackageManufacturer -like $ComputerData.Manufacturer }
+		$DriverPackagesCount = ($DriverPackages | Measure-Object).Count
+		Write-CMLogEntry -Value " - Count of driver packages after filter processing: $($DriverPackagesCount)" -Severity 1
 
 		# Filter out driver packages that does not contain any value in the package description
-		Write-CMLogEntry -Value "- Filtering driver package results to packages that have details added to the package description field" -Severity 1
-		$DriverPackages = $DriverPackages | Where-Object { $_.PackageDescription -ne ([string]::IsNullOrEmpty($_.PackageDescription)) }
+		Write-CMLogEntry -Value " - Filtering driver package results to only include packages that have details added to the description field" -Severity 1
+		$DriverPackages = $DriverPackages | Where-Object { $_.PackageDescription -ne ([string]::Empty) }
+		$DriverPackagesCount = ($DriverPackages | Measure-Object).Count
+		Write-CMLogEntry -Value " - Count of driver packages after filter processing: $($DriverPackagesCount)" -Severity 1
 
 		foreach ($DriverPackageItem in $DriverPackages) {
 			# Construct custom object to hold values for current driver package properties used for matching with current computer details
@@ -1631,6 +1637,14 @@ Process {
 			}
 		}
 	}
+
+	##
+	#
+	# DEBUG ONLY
+	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-6" -Severity 1
+	#
+	##
+
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
