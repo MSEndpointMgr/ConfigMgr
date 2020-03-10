@@ -1,21 +1,21 @@
-﻿[CmdletBinding(SupportsShouldProcess=$true)]
+[CmdletBinding(SupportsShouldProcess = $true)]
 param(
-[parameter(Mandatory=$true,ParameterSetName="Single")]
-[parameter(ParameterSetName="Recurse")]
-[string]$SiteServer,
-[parameter(Mandatory=$false,ParameterSetName="Single")]
-$ApplicationName,
-[parameter(Mandatory=$true,ParameterSetName="Single")]
-[parameter(ParameterSetName="Recurse")]
-[string]$Locate,
-[parameter(Mandatory=$true,ParameterSetName="Single")]
-[parameter(ParameterSetName="Recurse")]
-[string]$Replace,
-[parameter(Mandatory=$false,ParameterSetName="Recurse")]
-[switch]$Recurse,
-[parameter(Mandatory=$false,ParameterSetName="Single")]
-[parameter(ParameterSetName="Recurse")]
-[switch]$Copy
+    [parameter(Mandatory = $true, ParameterSetName = "Single")]
+    [parameter(ParameterSetName = "Recurse")]
+    [string]$SiteServer,
+    [parameter(Mandatory = $false, ParameterSetName = "Single")]
+    $ApplicationName,
+    [parameter(Mandatory = $true, ParameterSetName = "Single")]
+    [parameter(ParameterSetName = "Recurse")]
+    [string]$Locate,
+    [parameter(Mandatory = $true, ParameterSetName = "Single")]
+    [parameter(ParameterSetName = "Recurse")]
+    [string]$Replace,
+    [parameter(Mandatory = $false, ParameterSetName = "Recurse")]
+    [switch]$Recurse,
+    [parameter(Mandatory = $false, ParameterSetName = "Single")]
+    [parameter(ParameterSetName = "Recurse")]
+    [switch]$Copy
 )
 
 Begin {
@@ -47,63 +47,35 @@ Begin {
 
 Process {
     function Rename-ApplicationSource {
-        [CmdletBinding(SupportsShouldProcess=$true)]
+        [CmdletBinding(SupportsShouldProcess = $true)]
         param(
-        [parameter(Mandatory=$true)]
-        $AppName
+            [parameter(Mandatory = $true)]
+            $AppName
         )
         $AppName | ForEach-Object {
             $LocalizedDisplayName = $_.LocalizedDisplayName
-            $Application = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_ApplicationLatest" -ComputerName $SiteServer | Where-Object { $_.LocalizedDisplayName -like "$($LocalizedDisplayName)" }
-            $CurrentApplication = [wmi]$Application.__PATH
+            $CurrentApplication = [wmi]$_.__PATH
             # Deserialize SDMPakageXML property from string
-            $ApplicationXML = [Microsoft.ConfigurationManagement.ApplicationManagement.Serialization.SccmSerializer]::DeserializeFromString($CurrentApplication.SDMPackageXML,$True)
+            $ApplicationXML = [Microsoft.ConfigurationManagement.ApplicationManagement.Serialization.SccmSerializer]::DeserializeFromString($CurrentApplication.SDMPackageXML, $True)
+
             foreach ($DeploymentType in $ApplicationXML.DeploymentTypes) {
                 $Installer = $DeploymentType.Installer
-                $CurrentContentLocation = $DeploymentType.Installer.Contents[0].Location
-                $ContentLocation = $DeploymentType.Installer.Contents[0].Location -replace "$($Locate)", "$($Replace)"
+                $CurrentContentLocation = $DeploymentType.Installer.Contents[0].Location.TrimEnd("\")
+                $ContentLocation = $CurrentContentLocation -replace "$($Locate)", "$($Replace)"
                 if ($CurrentContentLocation -match $Locate) {
-                    # If the new content source directory doesn't exist, create the path
                     try {
-                        if (-not($Copy)) {
-                            if (-not(Test-Path $ContentLocation -PathType Container)) {
-                                New-Item -Path $ContentLocation -ItemType Directory | Out-Null
-                            }
-                        }
                         # If Copy parameter is specified, copy source content to destination
                         if ($Copy) {
                             Write-Verbose "Initiating copy operation"
-                            if ($CurrentContentLocation.EndsWith("\")) {
-                                Write-Verbose "Special characters was found at end of string"
-                                $FinalDestination = $ContentLocation.Substring(0,$ContentLocation.Length-1)
-                                if ($PSCmdlet.ShouldProcess("From: $($CurrentContentLocation)","Copy files")) {
-                                    Write-Verbose "Copy destination: `n$($FinalDestination)"
-                                    if (-not(Test-Path -Path $FinalDestination)) {
-                                        New-Item -Path $FinalDestination -ItemType Directory | Out-Null
-                                        if ((Get-ChildItem -Path $FinalDestination | Measure-Object).Count -eq 0) {
-                                            $FinalSource = $CurrentContentLocation.Substring(0,$CurrentContentLocation.Length-1)
-                                            Write-Verbose "Copy source: `n$($FinalSource)"
-                                            $SourceChildItems = Get-ChildItem -Path $FinalSource
-                                            foreach ($SourceChildItem in $SourceChildItems) {
-                                                Copy-Item -Path $SourceChildItem.FullName -Destination $FinalDestination -Force -Recurse -Verbose:($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            else {
-                                Write-Verbose "No special characters was found at end of string"
-                                $FinalDestination = $ContentLocation
-                                if ($PSCmdlet.ShouldProcess("From: $($CurrentContentLocation)","Copy files")) {
-                                    Write-Verbose "Copy destination: $($FinalDestination)"
-                                    if (-not(Test-Path -Path $FinalDestination)) {
-                                        New-Item -Path $FinalDestination -ItemType Directory | Out-Null
-                                        if ((Get-ChildItem -Path $FinalDestination | Measure-Object).Count -eq 0) {
-                                            $FinalSource = $CurrentContentLocation
-                                            $SourceChildItems = Get-ChildItem -Path $FinalSource
-                                            foreach ($SourceChildItem in $SourceChildItems) {
-                                                Copy-Item -Path $SourceChildItem.FullName -Destination $FinalDestination -Force -Recurse -Verbose:($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent)
-                                            }
+                            if ($PSCmdlet.ShouldProcess("From: $($CurrentContentLocation)", "Copy files")) {
+                                Write-Verbose "Copy destination: $($ContentLocation)"
+                                if (-not(Test-Path -Path $ContentLocation)) {
+                                    New-Item -Path $ContentLocation -ItemType Directory | Out-Null
+                                    if ((Get-ChildItem -Path $ContentLocation | Measure-Object).Count -eq 0) {
+                                        Write-Verbose "Copy source: `n$($CurrentContentLocation)"
+                                        $SourceChildItems = Get-ChildItem -Path $CurrentContentLocation
+                                        foreach ($SourceChildItem in $SourceChildItems) {
+                                            Copy-Item -Path $SourceChildItem.FullName -Destination $ContentLocation -Force -Recurse -Verbose:($PSCmdlet.MyInvocation.BoundParameters["Verbose"].IsPresent)
                                         }
                                     }
                                 }
@@ -113,6 +85,7 @@ Process {
                     catch [Exception] {
                         Throw $_.Exception.Message
                     }
+
                     # Update the content source location
                     if ($PSCmdlet.ShouldProcess("Application: $($LocalizedDisplayName)", "Amend content source path")) {
                         if ($CurrentContentLocation -ne $ContentLocation) {
@@ -132,20 +105,20 @@ Process {
                             Write-Verbose "New content source path: `n $($ContentLocation)"
                         }
                         elseif ($CurrentContentLocation -eq $ContentLocation) {
-                            Write-Warning "The current content location path matches the new location, will not update the path for '$($LocalizedDisplayName)'"
+                            Write-Warning "The current content location path matches the new location, will not update the path for '$($LocalizedDisplayName)'."
                         }
                     }
                 }
                 else {
-                    Write-Warning "The search term '$($Locate)' for application '$($LocalizedDisplayName)' could not be matched in the content source location '$($CurrentContentLocation)'"
+                    Write-Warning "The search term '$($Locate)' for application '$($LocalizedDisplayName)' could not be matched in the content source location '$($CurrentContentLocation)'."
                 }
             }
         }
     }
+
     if (($PSBoundParameters["Recurse"]) -and (-not($PSBoundParameters["ApplicationName"])) -and ($ApplicationName.Length -eq 0)) {
         $ApplicationName = New-Object -TypeName System.Collections.ArrayList
-        $GetApplications = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_Application" -ComputerName $SiteServer | Where-Object {$_.IsLatest -eq $True}
-        $ApplicationCount = $GetApplications.Count
+        $GetApplications = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_Application" -Filter "IsLatest = '$True'" -ComputerName $SiteServer ## Baard
         $GetApplications | ForEach-Object {
             $ApplicationName.Add($_) | Out-Null
         }
@@ -155,7 +128,10 @@ Process {
         Write-Warning "You cannot specify the 'ApplicationName' and 'Recurse' parameters at the same time"
     }
     if ((-not($PSBoundParameters["Recurse"])) -and ($PSBoundParameters["ApplicationName"]) -and ($ApplicationName.Length -ge 1)) {
-        $GetApplicationName = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_ApplicationLatest" -ComputerName $SiteServer | Where-Object { $_.LocalizedDisplayName -like "$($ApplicationName)" }
+        $GetApplicationName = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_ApplicationLatest" -Filter "LocalizedDisplayName like '%$($ApplicationName)%'" -ComputerName $SiteServer ## Baard
         Rename-ApplicationSource -AppName $GetApplicationName -Verbose
     }
 }
+
+# & .\Update-CMApplicationSource.ps1 -SiteServer Oslmgt09 -Locate oslmgt02 -Replace Oslmgt09 -ApplicationName "AlternaTIFF x86" -Copy -Verbose
+# & .\Update-CMApplicationSource.ps1 -SiteServer Oslmgt09 -Locate oslmgt02 -Replace Oslmgt09 -Copy -Recurse -Verbose
