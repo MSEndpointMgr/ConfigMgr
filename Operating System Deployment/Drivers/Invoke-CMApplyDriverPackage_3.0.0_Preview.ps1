@@ -131,7 +131,7 @@
 	2.2.7 - (2020-02-10) Added a new parameter named TargetOSVersion. Use this parameter when DeploymentType is OSUpgrade and you don't want to rely on the OS version detected from the imported Operating System Upgrade Package or Operating System Image objects.
 						 This parameter should mainly be used as an override and was implemented due to drivers for Windows 10 1903 were incorrectly detected when deploying or upgrading to Windows 10 1909 using imported source files, not for a 
                          reference image for Windows 10 1909 as the Enablement Package would have flipped the build change to 18363 in such an image.
-    3.0.0 - (2020-02-11) ..........
+    3.0.0 - (2020-02-11) .......... Added support for AZW computer manufacturer by request from the community.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -805,7 +805,12 @@ Process {
                 $ComputerDetails.Manufacturer = "Viglen"
                 $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
                 $ComputerDetails.SystemSKU = (Get-WmiObject -Class "Win32_BaseBoard" | Select-Object -ExpandProperty SKU).Trim()
-            }
+			}
+			"*AZW*" { 
+				$ComputerManufacturer = "AZW"
+				$ComputerModel = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+				$SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace root\WMI).BaseBoardProduct.Trim()
+			}
         }
         
         # Handle output to log file for computer details
@@ -1650,13 +1655,13 @@ Process {
 		}
 	}
 
-	##
-	#
+	############
 	# DEBUG ONLY
-	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-9" -Severity 1
-	#
-	##
+	Write-CMLogEntry -Value "DEBUG: Script version: 3.0.0-10" -Severity 1
 
+	############
+	# NOTES
+	# - Add support for HP's driver software like hotkey etc
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
@@ -1766,12 +1771,6 @@ Process {
 		# Main try-catch block was triggered, this should cause the script to fail with exit code 1
 		exit 1
 	}
-
-	##### END for 3.0.0 Preview
-	
-	### NOTES
-	# - Add support for HP's driver software like hotkey etc
-
 }
 End {
 	if ($PSCmdLet.ParameterSetName -eq "Execute") {
