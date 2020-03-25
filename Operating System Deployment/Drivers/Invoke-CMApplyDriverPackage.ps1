@@ -149,6 +149,8 @@
 	3.0.0 - (2020-03-14) A complete re-written version of the script. Includes a much improved logging functionality. Script is now divided into phases, which are represented in the ApplyDriverPackage.log that will provide a better troubleshooting experience.
 						 Added support for AZW and Fujitsu computer manufacturer by request from the community. Extended DebugMode to allow for overriding computer details, which allows the script to be tested against any model and it doesn't require to be tested
 						 directly on the model itself.
+	3.0.1 - (2020-03-25) Added TargetOSVersion parameter to be allowed to used in DebugMode. Fixed an issue where DebugMode would not be allowed to run on virtual machines. Fixed an issue where ComputerDetectionMethod script variable would be set to ComputerModel from
+						 SystemSKU in case it couldn't match on the first driver package, leading to HP driver packages would always fail since they barely never match on the ComputerModel (they include 'Base Model', 'Notebook PC' etc.)
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -216,6 +218,7 @@ param (
 	[string]$OverrideTSPackageID,
 
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the value that will be used as the target operating system version e.g. 18363.")]
+	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[ValidateNotNullOrEmpty()]
 	[string]$TargetOSVersion,
 
@@ -888,11 +891,16 @@ Process {
             Write-CMLogEntry -Value " - Supported computer platform detected, script execution allowed to continue" -Severity 1
         }
         else {
-            Write-CMLogEntry -Value " - Unsupported computer platform detected, virtual machines are not supported" -Severity 3
+			if ($Script:PSBoundParameters["DebugMode"]) {
+				Write-CMLogEntry -Value " - Unsupported computer platform detected, virtual machines are not supported but will be allowed in DebugMode" -Severity 2
+			}
+			else {
+				Write-CMLogEntry -Value " - Unsupported computer platform detected, virtual machines are not supported" -Severity 3
 
-            # Throw terminating error
-            $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
-            $PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
         }
 	}
 	
@@ -1046,14 +1054,11 @@ Process {
 			switch ($ComputerDetectionMethod) {
 				"SystemSKU" {
 					# Attempt to match against SystemSKU
-					$ComputerDetectionMethodResult = Confirm-SystemSKU -DriverPackageInput $DriverPackageDetails.SystemSKU -ComputerData $ComputerData
-
+					$ComputerDetectionMethodResult = Confirm-SystemSKU -DriverPackageInput $DriverPackageDetails.SystemSKU -ComputerData $ComputerData -ErrorAction Stop
+					
 					# Fall back to using computer model as the detection method instead of SystemSKU
 					if ($ComputerDetectionMethodResult.Detected -eq $false) {
 						$ComputerDetectionMethodResult = Confirm-ComputerModel -DriverPackageInput $DriverPackageDetails.Model -ComputerData $ComputerData
-
-						# Update value for computer detection method variable since fallback occurred
-						$Script:ComputerDetectionMethod = "ComputerModel"
 					}
 				}
 				"ComputerModel" {
@@ -1351,10 +1356,10 @@ Process {
 		)
 
 		# Handle multiple SystemSKU's from driver package input and determine the proper delimiter
-		if ($ComputerData.SystemSKU -match ",") {
+		if ($DriverPackageInput -match ",") {
 			$SystemSKUDelimiter = ","
 		}
-		if ($ComputerData.SystemSKU -match ";") {
+		if ($DriverPackageInput -match ";") {
 			$SystemSKUDelimiter = ";"
 		}
 
