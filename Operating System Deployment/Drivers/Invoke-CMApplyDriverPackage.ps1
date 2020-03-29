@@ -151,6 +151,7 @@
 						 directly on the model itself.
 	3.0.1 - (2020-03-25) Added TargetOSVersion parameter to be allowed to used in DebugMode. Fixed an issue where DebugMode would not be allowed to run on virtual machines. Fixed an issue where ComputerDetectionMethod script variable would be set to ComputerModel from
 						 SystemSKU in case it couldn't match on the first driver package, leading to HP driver packages would always fail since they barely never match on the ComputerModel (they include 'Base Model', 'Notebook PC' etc.)
+	3.0.2 - (2020-03-29) Fixed a spelling mistake in the Manufacturer parameter.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -199,7 +200,7 @@ param (
 	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected computer manufacturer when running in debug mode.")]
 	[ValidateNotNullOrEmpty()]
 	[ValidateSet("Hewlett-Packard", "HP", "Dell", "Lenovo", "Microsoft", "Fujitsu", "Panasonic", "Viglen", "AZW")]
-	[string]$Manfucaturer,
+	[string]$Manufacturer,
 
 	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected computer model when running in debug mode.")]
 	[ValidateNotNullOrEmpty()]
@@ -853,8 +854,8 @@ Process {
 		
 		# Handle overriding computer details if debug mode and additional parameters was specified
 		if ($Script:PSCmdlet.ParameterSetName -like "Debug") {
-			if (-not([string]::IsNullOrEmpty($Manfucaturer))) {
-				$ComputerDetails.Manufacturer = $Manfucaturer
+			if (-not([string]::IsNullOrEmpty($Manufacturer))) {
+				$ComputerDetails.Manufacturer = $Manufacturer
 			}
 			if (-not([string]::IsNullOrEmpty($ComputerModel))) {
 				$ComputerDetails.Model = $ComputerModel
