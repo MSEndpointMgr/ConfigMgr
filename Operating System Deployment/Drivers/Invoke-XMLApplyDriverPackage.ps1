@@ -22,7 +22,7 @@
 	Specify the operating system architecture being deployed. By default 64-bit (x64) is selected.
 
 .PARAMETER OSVersion
-	Applicable to Windows 10 deployments for matching against version specific driver packages. By default 1803 is selected.
+	Applicable to Windows 10 deployments for matching against version specific driver packages. By default 1809 is selected.
 
 .PARAMETER CleanUp
 	By default the temporary driver folder that is used to copy content down to the local disk is removed after the drivers are applied.
@@ -41,10 +41,13 @@
     Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2018-08-23
-    Updated:     2018-08-28
+    Updated:     2019-03-11
     
     Version history:
 	1.0.0 - (2018-08-28) Script created
+  1.0.1 - (2019-03-11) merlinfrombelgium@gmail.com
+    + Modifications to support 1809
+    + $MatchingPackage: -match "$($OS.Replace(' ', ''))-$osversion-$Architecture"
 
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
@@ -82,8 +85,8 @@ param (
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Specify the Windows 10 build number")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
-	[ValidateSet("1607", "1703", "1709", "1803")]
-	[string]$OSVersion = "1803",
+	[ValidateSet("1607", "1703", "1709", "1803", "1809")]
+	[string]$OSVersion = "1809",
 	
 	[parameter(Mandatory = $false, HelpMessage = "Use this switch to remove the driver package post application")]
 	[boolean]$CleanUp = $true,
@@ -102,7 +105,7 @@ Begin {
 			Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"
 		}
 	}
-	[version]$ScriptVersion = "1.0.0"
+	[version]$ScriptVersion = "1.0.1"
 }
 Process {
 	# Set Log Path
@@ -163,6 +166,7 @@ Process {
 	
 	# Windows Version Hash Table
 	$WindowsBuildHashTable = @{`
+		1809 = "10.0.17763.0"
 		1803 = "10.0.17134.1"
 		1709 = "10.0.16299.15";`
 		1703 = "10.0.15063.0";`
@@ -423,7 +427,7 @@ Process {
 										}
 										default {
 											$MatchingPackage = Get-ChildItem -Recurse -Path (Join-Path -Path $StoragePath -ChildPath "$($Package.Make)\$($Package.Model)") -Depth 2 | Where-Object {
-												$_.Name -match "$($OS.Replace(' ', ''))-$Architecture"
+												$_.Name -match "$($OS.Replace(' ', ''))-$OSVersion-$Architecture"
 											} | Sort-Object LastWriteTime -Descending | select -First 1
 										}
 									}
