@@ -33,6 +33,7 @@ Begin {
     $WhiteListedApps = New-Object -TypeName System.Collections.ArrayList
     $WhiteListedApps.AddRange(@(
         "Microsoft.DesktopAppInstaller",
+        "Microsoft.Office.OneNote",
         "Microsoft.Messaging", 
         "Microsoft.MSPaint",
         "Microsoft.Windows.Photos",
