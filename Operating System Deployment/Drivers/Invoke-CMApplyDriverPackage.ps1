@@ -152,6 +152,7 @@
 	3.0.1 - (2020-03-25) Added TargetOSVersion parameter to be allowed to used in DebugMode. Fixed an issue where DebugMode would not be allowed to run on virtual machines. Fixed an issue where ComputerDetectionMethod script variable would be set to ComputerModel from
 						 SystemSKU in case it couldn't match on the first driver package, leading to HP driver packages would always fail since they barely never match on the ComputerModel (they include 'Base Model', 'Notebook PC' etc.)
 	3.0.2 - (2020-03-29) Fixed a spelling mistake in the Manufacturer parameter.
+	3.0.3 - (2020-03-31) Small update to the Filter parameter's default value, it's now 'Drivers' instead of 'Driver'. Also added '64 bits' and '32 bits' to the translation function for the OS architecture of the current running task sequence.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -173,7 +174,7 @@ param (
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
 	[ValidateNotNullOrEmpty()]
-	[string]$Filter = "Driver",
+	[string]$Filter = "Drivers",
 
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define the operational mode, either Production or Pilot, for when calling ConfigMgr WebService to only return objects matching the selected operational mode.")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
@@ -551,6 +552,12 @@ Process {
 				$OSImageArchitecture = "x64"
 			}
 			"32-bit" {
+				$OSImageArchitecture = "x86"
+			}
+			"64 bits" {
+				$OSImageArchitecture = "x64"
+			}
+			"32 bits" {
 				$OSImageArchitecture = "x86"
 			}
 			default {
