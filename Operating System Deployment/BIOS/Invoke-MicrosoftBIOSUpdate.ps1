@@ -5,9 +5,6 @@
 .DESCRIPTION
     This script will invoke the Microsoft BIOS update process for the executable residing in the path specified for the Path parameter.
 
-.PARAMETER Path
-    Specify the path containing the Flash64W.exe and BIOS executable.
-
 .PARAMETER LogFileName
     Set the name of the log file produced by the flash utility.
 
@@ -16,21 +13,18 @@
 
 .NOTES
     FileName:    Invoke-MicrosoftBIOSUpdate.ps1
-    Authors:     Maurice Daly
-    Contact:     @modaly_it
+    Authors:     Maurice Daly / Nickolaj Andersen
+    Contact:     @modaly_it / @NickolajA
     Created:     2019-07-11
-    Updated:     2019-07-25
+    Updated:     2020-04-11
     
     Version history:
     1.0.0 - (2019-07-11) Script created (Maurice Daly)
-	1.0.2 - (2019-07-25) Minor fixes
+	1.0.1 - (2019-07-25) Minor fixes
+	1.0.2 - (2020-04-11) Removed unnecessary parameter Path, it was never used in the script
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
-    [parameter(Mandatory=$false, HelpMessage="Specify the path containing the Flash64W.exe and BIOS executable.")]
-    [ValidateNotNullOrEmpty()]
-    [string]$Path,
-
     [parameter(Mandatory=$false, HelpMessage="Set the name of the log file produced by the flash utility.")]
     [ValidateNotNullOrEmpty()]
     [string]$LogFileName = "MicrosoftBIOSUpdate.log"
