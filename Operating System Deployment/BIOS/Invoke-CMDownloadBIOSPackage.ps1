@@ -84,7 +84,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.3"
+	$ScriptVersion = "2.1.4"
 
 	if (-not ($PSBoundParameters["DebugMode"])) {
 		# Load Microsoft.SMS.TSEnvironment COM object
