@@ -408,7 +408,7 @@ Process {
 					[int]$uStep = [int]((($line -split "-")[0] -split "Installing ")[1] -split " of ")[0]
 					[int]$uMaxStep = [int]((($line -split "-")[0] -split "Installing ")[1] -split " of ")[1]
 					$sActionText = "Installing driver $uStep of $uMaxStep"
-					Invoke-ShowActionProgress -sActionText "Installing driver $uStep of $uMaxStep" -uStep $uStep -uMaxStep $uMaxStep
+					Invoke-ShowActionProgress -sActionText "Installing drivers ($uStep of $uMaxStep)" -uStep $uStep -uMaxStep $uMaxStep
 				}
 			} until ($EndOfStream = $process.StandardOutput.EndOfStream)
 	
