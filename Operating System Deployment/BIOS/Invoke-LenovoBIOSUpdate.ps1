@@ -106,7 +106,9 @@ Process {
 	if ((Test-Path -Path (Join-Path -Path $Path -ChildPath "OLEDLG.dll")) -eq $False) {
 		Write-CMLogEntry -Value "Copying OLEDLG.dll to $($Path) directory" -Severity 1
 		if (([string]::IsNullOrEmpty($TSEnvironment.Value("OSDisk"))) -eq $false) {
-			Copy-Item -Path (Join-Path -path $TSEnvironment.Value("OSDisk") -ChildPath "Windows\System32\OLEDLG.dll") -Destination "$($Path)\OLEDLG.dll"
+			IF (Test-Path -Path (Join-Path -path $TSEnvironment.Value("OSDisk") -ChildPath "Windows\System32\OLEDLG.dll")){
+				Copy-Item -Path (Join-Path -path $TSEnvironment.Value("OSDisk") -ChildPath "Windows\System32\OLEDLG.dll") -Destination "$($Path)\OLEDLG.dll"
+			}
 		}
 		elseif ((Test-Path -Path "C:\Windows\System32\OLEDLG.dll") -eq $true) {
 			Copy-Item -Path "C:\Windows\System32\OLEDLG.dll" -Destination "$($Path)\OLEDLG.dll"
