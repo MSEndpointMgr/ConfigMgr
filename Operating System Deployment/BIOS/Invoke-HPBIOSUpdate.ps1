@@ -171,7 +171,7 @@ Process {
 	
 	if (-not([System.String]::IsNullOrEmpty($PasswordBin))) {
 		# Add password to the flash bios switches
-		$FlashSwitches = $FlashSwitches + " -p$($PasswordBinPath)\$($PasswordBin)"	
+		$FlashSwitches = $FlashSwitches + " -p`"$($PasswordBinPath)\$($PasswordBin)`""	
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
 	else {
