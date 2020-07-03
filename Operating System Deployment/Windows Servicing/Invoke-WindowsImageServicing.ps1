@@ -136,7 +136,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2020-01-27
+    Updated:     2020-07-03
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -164,6 +164,7 @@
                          using the ShowProgress switch. Additionally, language features can now also be added using the IncludeLanguageFeatures and LanguageFeaturesMediaFile parameters.
     2.1.0 - (2020-01-27) Added new parameters to support content refresh on Distribution Points for either an Operating System Image or Operating System Upgrade Package object in ConfigMgr.
                          New parameters are RefreshPackage, PackageID and PackageType.
+    2.1.1 - (2020-07-03) Added support for TLS 1.2 when downloading modules from PSGallery
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -1548,7 +1549,7 @@ Process {
                 $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountOSImage)"" /Add-Package /PackagePath:""$($PackagePathItem)""" -ErrorAction Stop
 
                 if ($ReturnValue -ne 0) {
-                    Write-CMLogEntry -Value " - Failed to apply '$($UpdateType)' package to OS image, see DISM.log for more details" -Severity 3
+                    Write-CMLogEntry -Value " - Failed to apply '$($UpdateType)' package to OS image, see DISM.log for more details. Exit code from process: $($ReturnValue)" -Severity 3
 
                     # Throw terminating error
                     $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
@@ -2074,6 +2075,9 @@ Process {
             $PSCmdlet.ThrowTerminatingError($ErrorRecord)
         }
     }
+
+    # Enable TLS 1.2 support for downloading modules from PSGallery
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
     # PowerShell variables
     $ProgressPreference = "SilentlyContinue"
