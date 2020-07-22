@@ -38,7 +38,7 @@
 .PARAMETER OSImageTSVariableName
 	Specify a Task Sequence variable name that should contain a value for an OS Image package ID that will be used to override automatic detection.
 
-	.PARAMETER TargetOSVersion
+.PARAMETER TargetOSVersion
 	Define the value that will be used as the target operating system version e.g. 18363.
 
 .EXAMPLE
@@ -68,7 +68,7 @@
 	Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2019-06-13
+    Updated:     2020-07-22
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
 	Contributors: @CodyMathis123, @JamesMcwatty, @MerlinfromBE
@@ -419,13 +419,13 @@ Process {
 						$OSImageTSVariableValue = $TSEnvironment.Value("$($OSImageTSVariableName)")
 						foreach ($OSImage in $OSImages) {
 							if ($OSImage.PackageID -like $OSImageTSVariableValue) {
-																# Handle support for target OS version override from parameter input
-																if ($Script:PSBoundParameters["TargetOSVersion"]) {
-																	$OSBuild = "10.0.$($TargetOSVersion).1"
-																}
-																else {
-																	$OSBuild = $OSImage.Version
-																}
+								# Handle support for target OS version override from parameter input
+								if ($Script:PSBoundParameters["TargetOSVersion"]) {
+									$OSBuild = "10.0.$($TargetOSVersion).1"
+								}
+								else {
+									$OSBuild = $OSImage.Version
+								}
 								
 								# Create custom object for return value
 								$PSObject = [PSCustomObject]@{
@@ -1051,9 +1051,9 @@ Process {
 											Default {
 												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
 											}
-											}
+										}
 																
-											try {
+										try {
 											if ($DownloadInvocation -eq 0) {
 												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
 												Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
