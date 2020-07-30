@@ -27,7 +27,7 @@
 #>
 Begin {
     # White list of Features On Demand V2 packages
-    $WhiteListOnDemand = "NetFX3|Tools.Graphics.DirectX|Tools.DeveloperMode.Core|Language|Browser.InternetExplorer|ContactSupport|OneCoreUAP|Media.WindowsMediaPlayer|Hello.Face"
+        $WhiteListOnDemand = "NetFX3|Tools.Graphics.DirectX|Tools.DeveloperMode.Core|Language|Browser.InternetExplorer|ContactSupport|OneCoreUAP|Media.WindowsMediaPlayer|Hello.Face|Microsoft.Windows.Notepad|Microsoft.Windows.ISE|Microsoft.Windows.Wordpad|Windows.Client.ShellComponents"
 
     # White list of appx packages to keep installed
     $WhiteListedApps = New-Object -TypeName System.Collections.ArrayList
