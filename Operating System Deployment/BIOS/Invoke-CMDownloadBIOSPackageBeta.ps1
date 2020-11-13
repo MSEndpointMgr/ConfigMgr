@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Download BIOS package (regular package) matching computer model and manufacturer.
 	
@@ -7,136 +7,150 @@
     for ConfigMgr WebService for a list of Packages. It then sets the OSDDownloadDownloadPackages variable to include
     the PackageID property of a package matching the computer model. If multiple packages are detect, it will select
 	most current one by the creation date of the packages.
-	
-.PARAMETER URI
-	Set the URI for the ConfigMgr WebService.
-	
-.PARAMETER SecretKey
-	Specify the known secret key for the ConfigMgr WebService.
+
+.PARAMETER DebugMode
+	Set the script to operate in 'DebugMode' deployment type mode.
+
+.PARAMETER Endpoint
+	Specify the internal fully qualified domain name of the server hosting the AdminService, e.g. CM01.domain.local.
+
+.PARAMETER UserName
+	Specify the service account user name used for authenticating against the AdminService endpoint.
+
+.PARAMETER Password
+	Specify the service account password used for authenticating against the AdminService endpoint.
 	
 .PARAMETER Filter
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
-	
+
+.PARAMETER OperationalMode
+	Define the operational mode, either Production or Pilot, for when calling ConfigMgr WebService to only return objects matching the selected operational mode.
+
+.PARAMETER Manufacturer
+	Override the automatically detected computer manufacturer when running in debug mode.
+
+.PARAMETER ComputerModel
+	Override the automatically detected computer model when running in debug mode.
+
+.PARAMETER SystemSKU
+	Override the automatically detected SystemSKU when running in debug mode.
+
+.PARAMETER OSVersionFallback
+	Use this switch to check for drivers packages that matches earlier versions of Windows than what's specified as input for TargetOSVersion.
+
 .EXAMPLE
-    Production BIOS Packages:
-	# Detect, download and apply an available BIOS update during OS deployment with ConfigMgr (Default):
-	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
+	# Detect and download latest available BIOS package with ConfigMgr through the admin service:
+	.\Invoke-CMDownloadBIOSPackage.ps1 -Endpoint "CM01.domain.com" -UserName "Username" -Password "Password"
 
-	# Detect, download and apply an available BIOS update during OS upgrade with ConfigMgr:
-    .\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType OSUpgrade
-    
-	# Detect, download and apply an available BIOS update during OS upgrade for an existing operating system using ConfigMgr:
-	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType BIOSUpdate    
-
-	Piloting BIOS Packages (Using V5.0.0 of the BIOS  Automation Tool onwards):
-	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS Update Pilot"
+	# Detect, and report on the matched BIOS release without downloading / in full OS
+	.\Invoke-CMDownloadBIOSPackage.ps1 -Endpoint "CM01.domain.com" -UserName "Username" -Password "Password" -DebugMode
 	
+	# Detect, and report on the matched BIOS release without downloading / in full OS, with the make / model / sku specified
+	.\Invoke-CMDownloadBIOSPackage.ps1 -Endpoint "CM01.domain.com" -UserName "Username" -Password "Password" -Manufacturer "HP" -ComptuerModel "ZBook Studio x360 G5" -SystemSKU "8427" -DebugMode
+
 .NOTES
     FileName:    Invoke-CMDownloadBIOSPackage.ps1
-    Author:      Nickolaj Andersen & Maurice Daly
-    Contact:     @NickolajA / @modaly_it
-    Created:     2017-05-22
-    Updated:     2019-05-14
+	Author:      Nickolaj Andersen / Maurice Daly
+    Contact:     @NickolajA / @MoDaly_IT
+    Created:     2020-10-30
+    Updated:     2020-10-30
     
     Version history:
-    1.0.0 - (2017-05-22) Script created 
-    1.0.1 - (2017-07-07) Updated with BIOS revision checker. Initially used for Dell systems 
-    1.0.2 - (2017-07-13) Updated with support for downloading BIOS packages for Lenovo models 
-    1.0.3 - (2017-07-19) Updated with additional condition for matching Lenovo models 
-    1.0.4 - (2017-07-27) Updated with additional logic for matching based on description for Lenovo models and version checking update for Lenovo using the release date value 
-	1.0.5 - (2017-10-09) Updated script to support downloading the BIOS package upon a match being found and set the OSDBIOSPackage variable
-	2.0.0 - (2018-01-10) Updates for running script in the Full OS and other minor tweaks 
-	2.0.1 - (2018-02-06) Fix for Hewlett Packard 
-	2.0.2 - (2018-03-13) Added version info in the log file and output of SKU value for troubleshooting purposes
-	2.0.3 - (2018-04-06) Updated log function with Out-File instead of Add-Content cmdlet
-	2.0.4 - (2018-04-09) Minor code fixes
-	2.0.5 - (2018-05-27) Re-constructed the logic for matching BIOS package to begin with computer model or SystemSKU (SystemSKU takes precedence before computer model) and improved the logging when matching for BIOS packages}
-						 Added support for a DebugMode switch for running script outside of a task sequence for BIOS package detection
-	2.0.6 - (2018-05-29) Added logic to all for the fallback to model name matching for BIOS update packages
-						 Additional logging output
-	2.0.7 - (2018-11-27) Added logic for HP BIOS version differences in new models
-	2.0.8 - (2019-05-01) Updated the computer model detection section and current BIOS version logic to support formats of XX.XX and XX.XX.XX
-	2.0.9 - (2019-05-02) Updated the script to support BIOS versioning in the F.XX format
-	2.1.0 - (2019-05-07) Updated the script to support BIOS versioning in the 'XX.XX.XX X X' format
-	2.1.1 - (2019-05-14) Updated the script to correctly handling computer models that contains '-' in the model name
-	2.1.2 - (2019-07-11) Updated to support Microsoft Surface devices
+    3.0.0 - (2020-10-30) - Script created
+
 #>
-[CmdletBinding(SupportsShouldProcess = $true)]
+[CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "BareMetal")]
 param (
-	[parameter(Mandatory = $true, HelpMessage = "Set the URI for the ConfigMgr WebService.")]
-	[ValidateNotNullOrEmpty()]
-	[string]$URI,
+	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Set the script to operate in 'DebugMode' deployment type mode.")]
+	[switch]$DebugMode,
 
-	[parameter(Mandatory = $true, HelpMessage = "Specify the known secret key for the ConfigMgr WebService.")]
+	[parameter(Mandatory = $true, HelpMessage = "Specify the internal fully qualified domain name of the server hosting the AdminService, e.g. CM01.domain.local.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$SecretKey,
+	[string]$Endpoint,
 
-	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or BIOSUpdate.")]
-	[ValidateSet("BareMetal", "OSUpgrade", "BIOSUpdate")]
-	[string]$DeploymentType = "BareMetal",
-
-	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
+	[parameter(Mandatory = $true, HelpMessage = "Specify the service account user name used for authenticating against the AdminService endpoint.")]
 	[ValidateNotNullOrEmpty()]
-	[string]$Filter = [System.String]::Empty,
+	[string]$UserName = "",
+
+	[parameter(Mandatory = $true, HelpMessage = "Specify the service account password used for authenticating against the AdminService endpoint.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$Password = "",
 	
-	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Use this switch when running script outside of a Task Sequence.")]
-	[switch]$DebugMode
+	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling the AdminService to only return objects matching the filter.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$Filter = "BIOS",
+
+	[parameter(Mandatory = $false, HelpMessage = "Define the operational mode, either Production or Pilot, for when calling ConfigMgr WebService to only return objects matching the selected operational mode.")]
+	[ValidateNotNullOrEmpty()]
+	[ValidateSet("Production", "Pilot")]
+	[string]$OperationalMode = "Production",
+
+	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected computer manufacturer when running in debug mode.")]
+	[ValidateNotNullOrEmpty()]
+	[ValidateSet("Hewlett-Packard", "HP", "Dell", "Lenovo", "Microsoft", "Fujitsu", "Panasonic", "Viglen", "AZW")]
+	[string]$Manufacturer,
+
+	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected computer model when running in debug mode.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$ComputerModel,
+
+	[parameter(Mandatory = $false, ParameterSetName = "Debug", HelpMessage = "Override the automatically detected SystemSKU when running in debug mode.")]
+	[ValidateNotNullOrEmpty()]
+	[string]$SystemSKU
+
 )
 Begin {
-	# Define script version
-	$ScriptVersion = "2.1.0"
-
-	if (-not ($PSBoundParameters["DebugMode"])) {
-		# Load Microsoft.SMS.TSEnvironment COM object
+	# Load Microsoft.SMS.TSEnvironment COM object
+	if ($PSCmdLet.ParameterSetName -notlike "Debug") {
 		try {
-			$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
-			# Set Log Path
-			switch ($DeploymentType) {
-				"OSUpgrade" {
-					$LogsDirectory = Join-Path -Path $env:SystemRoot -ChildPath "Temp"
-				}
-				"BIOSUpdate" {
-					$LogsDirectory = Join-Path -Path $env:SystemRoot -ChildPath "Temp"
-				}
-				Default {
-					$LogsDirectory = $Script:TSEnvironment.Value("_SMSTSLogPath")
-				}
-			}
-			Write-Verbose -Message "Running Script - Log located at $LogsDirectory"
+			$TSEnvironment = New-Object -ComObject "Microsoft.SMS.TSEnvironment" -ErrorAction Stop
 		}
 		catch [System.Exception] {
-			Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"; break
+			Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"; exit
 		}
-	}
-	else {
-		$LogsDirectory = $env:Temp
-		Write-Verbose -Message "Running Script - Debug Mode: Log located at $LogsDirectory"
-		$DebugMode = $true
 	}
 }
 Process {
-   	 # SSL Certificate Validation Workaround
-	[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}	
-
+	# Set Log Path
+	switch ($PSCmdLet.ParameterSetName) {
+		"Debug" {
+			$LogsDirectory = Join-Path -Path $env:SystemRoot -ChildPath "Temp"
+		}
+		default {
+			$LogsDirectory = $Script:TSEnvironment.Value("_SMSTSLogPath")
+		}
+	}
+	
 	# Functions
 	function Write-CMLogEntry {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Value added to the log file.")]
 			[ValidateNotNullOrEmpty()]
-			[string]$Value,
+            [string]$Value,
+            
 			[parameter(Mandatory = $true, HelpMessage = "Severity for the log entry. 1 for Informational, 2 for Warning and 3 for Error.")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("1", "2", "3")]
-			[string]$Severity,
+            [string]$Severity,
+            
 			[parameter(Mandatory = $false, HelpMessage = "Name of the log file that the entry will written to.")]
 			[ValidateNotNullOrEmpty()]
-			[string]$FileName = "ApplyBIOSPackage.log"
+			[string]$FileName = "DownloadBIOSPackage.log"
 		)
 		# Determine log file location
 		$LogFilePath = Join-Path -Path $LogsDirectory -ChildPath $FileName
 		
 		# Construct time stamp for log entry
-		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), "+", (Get-WmiObject -Class Win32_TimeZone | Select-Object -ExpandProperty Bias))
+		if (-not(Test-Path -Path 'variable:global:TimezoneBias')) {
+			[string]$global:TimezoneBias = [System.TimeZoneInfo]::Local.GetUtcOffset((Get-Date)).TotalMinutes
+			if ($TimezoneBias -match "^-") {
+				$TimezoneBias = $TimezoneBias.Replace('-', '+')
+			}
+			else {
+				$TimezoneBias = '-' + $TimezoneBias
+			}
+		}
+		$Time = -join @((Get-Date -Format "HH:mm:ss.fff"), $TimezoneBias)
 		
 		# Construct date for log entry
 		$Date = (Get-Date -Format "MM-dd-yyyy")
@@ -145,22 +159,23 @@ Process {
 		$Context = $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)
 		
 		# Construct final log entry
-		$LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""ApplyBIOSPackage"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
+		$LogText = "<![LOG[$($Value)]LOG]!><time=""$($Time)"" date=""$($Date)"" component=""DownloadBIOSPackage"" context=""$($Context)"" type=""$($Severity)"" thread=""$($PID)"" file="""">"
 		
 		# Add value to log file
 		try {
 			Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
 		}
 		catch [System.Exception] {
-			Write-Warning -Message "Unable to append log entry to ApplyBIOSPackage.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
+			Write-Warning -Message "Unable to append log entry to DownloadBIOSPackage.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
 		}
 	}
-	
+
 	function Invoke-Executable {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
 			[ValidateNotNullOrEmpty()]
-			[string]$FilePath,
+            [string]$FilePath,
+            
 			[parameter(Mandatory = $false, HelpMessage = "Specify arguments that will be passed to the executable")]
 			[ValidateNotNull()]
 			[string]$Arguments
@@ -171,7 +186,7 @@ Process {
 			FilePath = $FilePath
 			NoNewWindow = $true
 			Passthru = $true
-			ErrorAction	= "Stop"
+			ErrorAction = "Stop"
 		}
 		
 		# Add ArgumentList param if present
@@ -197,62 +212,77 @@ Process {
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[ValidatePattern('^[A-Z0-9]{3}[A-F0-9]{5}$')]
-			[string]$PackageID,
+			[ValidatePattern("^[A-Z0-9]{3}[A-F0-9]{5}$")]
+            [string]$PackageID,
+            
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify the download location type.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
 			[ValidateSet("Custom", "TSCache", "CCMCache")]
-			[string]$DestinationLocationType,
+            [string]$DestinationLocationType,
+            
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Save the download location to the specified variable name.")]
 			[Parameter(ParameterSetName = "CustomPath")]
 			[ValidateNotNullOrEmpty()]
-			[string]$DestinationVariableName,
+            [string]$DestinationVariableName,
+            
 			[parameter(Mandatory = $true, ParameterSetName = "CustomPath", HelpMessage = "When location type is specified as Custom, specify the custom path.")]
 			[ValidateNotNullOrEmpty()]
 			[string]$CustomLocationPath
 		)
 		# Set OSDDownloadDownloadPackages
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDownloadPackages to: $($PackageID)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDownloadPackages") = "$($PackageID)"
 		
 		# Set OSDDownloadDestinationLocationType
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDestinationLocationType to: $($DestinationLocationType)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = "$($DestinationLocationType)"
 		
 		# Set OSDDownloadDestinationVariable
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDestinationVariable to: $($DestinationVariableName)" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationVariable") = "$($DestinationVariableName)"
 		
 		# Set OSDDownloadDestinationPath
 		if ($DestinationLocationType -like "Custom") {
-			Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
+			Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDestinationPath to: $($CustomLocationPath)" -Severity 1
 			$TSEnvironment.Value("OSDDownloadDestinationPath") = "$($CustomLocationPath)"
 		}
+
+		# Set SMSTSDownloadRetryCount to 1000 to overcome potential BranchCache issue that will cause 'SendWinHttpRequest failed. 80072efe'
+		$TSEnvironment.Value("SMSTSDownloadRetryCount") = 1000
 		
 		# Invoke download of package content
 		try {
-			Write-CMLogEntry -Value "Starting package content download process, this might take some time" -Severity 1
-			
-			if (Test-Path -Path "C:\Windows\CCM\OSDDownloadContent.exe") {
-				Write-CMLogEntry -Value "Starting package content download process (FullOS), this might take some time" -Severity 1
-				$ReturnCode = Invoke-Executable -FilePath "C:\Windows\CCM\OSDDownloadContent.exe"
+			if ($TSEnvironment.Value("_SMSTSInWinPE") -eq $false) {
+				Write-CMLogEntry -Value " - Starting package content download process (FullOS), this might take some time" -Severity 1
+				$ReturnCode = Invoke-Executable -FilePath (Join-Path -Path $env:windir -ChildPath "CCM\OSDDownloadContent.exe")
 			}
 			else {
-				Write-CMLogEntry -Value "Starting package content download process (WinPE), this might take some time" -Severity 1
+				Write-CMLogEntry -Value " - Starting package content download process (WinPE), this might take some time" -Severity 1
 				$ReturnCode = Invoke-Executable -FilePath "OSDDownloadContent.exe"
 			}
+
+			# Reset SMSTSDownloadRetryCount to 5 after attempted download
+			$TSEnvironment.Value("SMSTSDownloadRetryCount") = 5
 			
 			# Match on return code
 			if ($ReturnCode -eq 0) {
-				Write-CMLogEntry -Value "Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
+				Write-CMLogEntry -Value " - Successfully downloaded package content with PackageID: $($PackageID)" -Severity 1
 			}
 			else {
-				Write-CMLogEntry -Value "Package content download process failed with return code $($ReturnCode)" -Severity 2
+				Write-CMLogEntry -Value " - Failed to download package content with PackageID '$($PackageID)'. Return code was: $($ReturnCode)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
 			}
 		}
 		catch [System.Exception] {
-			Write-CMLogEntry -Value "An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3; exit 12
+            Write-CMLogEntry -Value " - An error occurred while attempting to download package content. Error message: $($_.Exception.Message)" -Severity 3
+            
+            # Throw terminating error
+            $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+            $PSCmdlet.ThrowTerminatingError($ErrorRecord)
 		}
 		
 		return $ReturnCode
@@ -260,22 +290,936 @@ Process {
 	
 	function Invoke-CMResetDownloadContentVariables {
 		# Set OSDDownloadDownloadPackages
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDownloadPackages to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDownloadPackages") = [System.String]::Empty
 		
 		# Set OSDDownloadDestinationLocationType
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDestinationLocationType to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationLocationType") = [System.String]::Empty
 		
 		# Set OSDDownloadDestinationVariable
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDestinationVariable to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationVariable") = [System.String]::Empty
 		
 		# Set OSDDownloadDestinationPath
-		Write-CMLogEntry -Value "Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
+		Write-CMLogEntry -Value " - Setting task sequence variable OSDDownloadDestinationPath to a blank value" -Severity 1
 		$TSEnvironment.Value("OSDDownloadDestinationPath") = [System.String]::Empty
 	}
+
+    function New-TerminatingErrorRecord {
+        param(
+            [parameter(Mandatory = $true, HelpMessage = "Specify the exception message details.")]
+            [ValidateNotNullOrEmpty()]
+            [string]$Message,
+
+            [parameter(Mandatory = $false, HelpMessage = "Specify the violation exception causing the error.")]
+            [ValidateNotNullOrEmpty()]
+            [string]$Exception = "System.Management.Automation.RuntimeException",
+
+            [parameter(Mandatory = $false, HelpMessage = "Specify the error category of the exception causing the error.")]
+            [ValidateNotNullOrEmpty()]
+            [System.Management.Automation.ErrorCategory]$ErrorCategory = [System.Management.Automation.ErrorCategory]::NotImplemented,
+            
+            [parameter(Mandatory = $false, HelpMessage = "Specify the target object causing the error.")]
+            [ValidateNotNullOrEmpty()]
+            [string]$TargetObject = ([string]::Empty)
+        )
+        # Construct new error record to be returned from function based on parameter inputs
+        $SystemException = New-Object -TypeName $Exception -ArgumentList $Message
+        $ErrorRecord = New-Object -TypeName System.Management.Automation.ErrorRecord -ArgumentList @($SystemException, $ErrorID, $ErrorCategory, $TargetObject)
+
+        # Handle return value
+        return $ErrorRecord
+	}
+
+	function Get-DeploymentType {
+		switch ($PSCmdlet.ParameterSetName) {
+			"XMLPackage" {
+				# Set required variables for XMLPackage parameter set
+				$Script:DeploymentMode = $Script:XMLDeploymentType
+				$Script:PackageSource = "XML Package Logic file"
+
+				# Define the path for the pre-downloaded XML Package Logic file called DriverPackages.xml
+				$script:XMLPackageLogicFile = (Join-Path -Path $TSEnvironment.Value("MDMXMLPackage01") -ChildPath "DriverPackages.xml")
+				if (-not(Test-Path -Path $XMLPackageLogicFile)) {
+					Write-CMLogEntry -Value " - Failed to locate required 'DriverPackages.xml' logic file for XMLPackage deployment type, ensure it has been pre-downloaded in a Download Package Content step before running this script" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}
+			default {
+				$Script:DeploymentMode = $Script:PSCmdlet.ParameterSetName
+				$Script:PackageSource = "AdminService"
+			}
+		}
+	}
 	
+	function ConvertTo-ObfuscatedUserName {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the user name string to be obfuscated for log output.")]
+            [ValidateNotNullOrEmpty()]
+            [string]$InputObject
+		)
+		# Convert input object to a character array
+		$UserNameArray = $InputObject.ToCharArray()
+
+		# Loop through each character obfuscate every second item, with exceptions of the @ character if present
+		for ($i = 0; $i -lt $UserNameArray.Count; $i++) {
+			if ($UserNameArray[$i] -notmatch "@") {
+				if ($i % 2) {
+					$UserNameArray[$i] = "*"
+				}
+			}
+		}
+
+		# Join character array and return value
+		return -join@($UserNameArray)
+	}
+
+	function Test-AdminServiceData {
+		# Validate correct value have been either set as a TS environment variable or passed as parameter input for service account user name used to authenticate against the AdminService
+		if ([string]::IsNullOrEmpty($Script:UserName)) {
+			switch ($PSCmdLet.ParameterSetName) {
+				"Debug" {
+					Write-CMLogEntry -Value " - Required service account user name could not be determined from parameter input" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+				default {
+					# Attempt to read TSEnvironment variable MDMUserName
+					$Script:UserName = $TSEnvironment.Value("MDMUserName")
+					if (-not([string]::IsNullOrEmpty($Script:UserName))) {
+						# Obfuscate user name
+						$ObfuscatedUserName = ConvertTo-ObfuscatedUserName -InputObject $Script:UserName
+
+						Write-CMLogEntry -Value " - Successfully read service account user name from TS environment variable 'MDMUserName': $($ObfuscatedUserName)" -Severity 1
+					}
+					else {
+						Write-CMLogEntry -Value " - Required service account user name could not be determined from TS environment variable" -Severity 3
+
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+					}
+				}
+			}
+		}
+		else {
+			# Obfuscate user name
+			$ObfuscatedUserName = ConvertTo-ObfuscatedUserName -InputObject $Script:UserName
+
+			Write-CMLogEntry -Value " - Successfully read service account user name from parameter input: $($ObfuscatedUserName)" -Severity 1
+		}
+
+		# Validate correct value have been either set as a TS environment variable or passed as parameter input for service account password used to authenticate against the AdminService
+		if ([string]::IsNullOrEmpty($Script:Password)) {
+			switch ($Script:PSCmdLet.ParameterSetName) {
+				"Debug" {
+					Write-CMLogEntry -Value " - Required service account password could not be determined from parameter input" -Severity 3
+				}
+				default {
+					# Attempt to read TSEnvironment variable MDMPassword
+					$Script:Password = $TSEnvironment.Value("MDMPassword")
+					if (-not([string]::IsNullOrEmpty($Script:Password))) {
+						Write-CMLogEntry -Value " - Successfully read service account password from TS environment variable 'MDMPassword': ********" -Severity 1
+					}
+					else {
+						Write-CMLogEntry -Value " - Required service account password could not be determined from TS environment variable" -Severity 3
+
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+					}
+				}
+			}
+		}
+		else {
+			Write-CMLogEntry -Value " - Successfully read service account password from parameter input: ********" -Severity 1
+		}
+
+		# Validate that if determined AdminService endpoint type is external, that additional required TS environment variables are available
+		if ($Script:AdminServiceEndpointType -like "External") {
+			if ($Script:PSCmdLet.ParameterSetName -notlike "Debug") {
+				# Attempt to read TSEnvironment variable MDMExternalEndpoint
+				$Script:ExternalEndpoint = $TSEnvironment.Value("MDMExternalEndpoint")
+				if (-not([string]::IsNullOrEmpty($Script:ExternalEndpoint))) {
+					Write-CMLogEntry -Value " - Successfully read external endpoint address for AdminService through CMG from TS environment variable 'MDMExternalEndpoint': $($Script:ExternalEndpoint)" -Severity 1
+				}
+				else {
+					Write-CMLogEntry -Value " - Required external endpoint address for AdminService through CMG could not be determined from TS environment variable" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+
+				# Attempt to read TSEnvironment variable MDMClientID
+				$Script:ClientID = $TSEnvironment.Value("MDMClientID")
+				if (-not([string]::IsNullOrEmpty($Script:ClientID))) {
+					Write-CMLogEntry -Value " - Successfully read client identification for AdminService through CMG from TS environment variable 'MDMClientID': $($Script:ClientID)" -Severity 1
+				}
+				else {
+					Write-CMLogEntry -Value " - Required client identification for AdminService through CMG could not be determined from TS environment variable" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+
+				# Attempt to read TSEnvironment variable MDMTenantName
+				$Script:TenantName = $TSEnvironment.Value("MDMTenantName")
+				if (-not([string]::IsNullOrEmpty($Script:TenantName))) {
+					Write-CMLogEntry -Value " - Successfully read client identification for AdminService through CMG from TS environment variable 'MDMTenantName': $($Script:TenantName)" -Severity 1
+				}
+				else {
+					Write-CMLogEntry -Value " - Required client identification for AdminService through CMG could not be determined from TS environment variable" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}			
+		}
+	}
+
+	function Get-AdminServiceEndpointType {
+		switch ($Script:DeploymentMode) {
+			"BareMetal" {
+				$SMSInWinPE = $TSEnvironment.Value("_SMSTSInWinPE")
+				if ($SMSInWinPE -eq $true) {
+					Write-CMLogEntry -Value " - Detected that script was running within a task sequence in WinPE phase, automatically configuring AdminService endpoint type" -Severity 1
+					$Script:AdminServiceEndpointType = "Internal"
+				}
+				else {
+					Write-CMLogEntry -Value " - Detected that script was not running in WinPE of a bare metal deployment type, this is not a supported scenario" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}
+			"Debug" {
+				$Script:AdminServiceEndpointType = "Internal"
+			}
+			default {
+				Write-CMLogEntry -Value " - Attempting to determine AdminService endpoint type based on current active Management Point candidates and from ClientInfo class" -Severity 1
+
+				# Determine active MP candidates and if 
+				$ActiveMPCandidates = Get-WmiObject -Namespace "root\ccm\LocationServices" -Class "SMS_ActiveMPCandidate"
+				$ActiveMPInternalCandidatesCount = ($ActiveMPCandidates | Where-Object { $PSItem.Type -like "Assigned" } | Measure-Object).Count
+				$ActiveMPExternalCandidatesCount = ($ActiveMPCandidates | Where-Object { $PSItem.Type -like "Internet" } | Measure-Object).Count
+
+				# Determine if ConfigMgr client has detected if the computer is currently on internet or intranet
+				$CMClientInfo = Get-WmiObject -Namespace "root\ccm" -Class "ClientInfo"
+				switch ($CMClientInfo.InInternet) {
+					$true {
+						if ($ActiveMPExternalCandidatesCount -ge 1) {
+							$Script:AdminServiceEndpointType = "External"
+						} 
+						else {
+							Write-CMLogEntry -Value " - Detected as an Internet client but unable to determine External AdminService endpoint, bailing out" -Severity 3
+				
+							# Throw terminating error
+							$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+							$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+						}
+					}
+					$false {
+						if ($ActiveMPInternalCandidatesCount -ge 1) {
+							$Script:AdminServiceEndpointType = "Internal"
+						}
+						else {
+							Write-CMLogEntry -Value " - Detected as an Intranet client but unable to determine Internal AdminService endpoint, bailing out" -Severity 3
+				
+							# Throw terminating error
+							$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+							$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+						}
+					}
+				}
+			}
+		}
+		Write-CMLogEntry -Value " - Determined AdminService endpoint type as: $($AdminServiceEndpointType)" -Severity 1
+	}
+
+	function Set-AdminServiceEndpointURL {
+		switch ($Script:AdminServiceEndpointType) {
+			"Internal" {
+				$Script:AdminServiceURL = "https://{0}/AdminService/wmi" -f $Endpoint
+			}
+			"External" {
+				$Script:AdminServiceURL = "{0}/wmi" -f $ExternalEndpoint
+			}
+		}
+		Write-CMLogEntry -Value " - Setting 'AdminServiceURL' variable to: $($Script:AdminServiceURL)" -Severity 1
+	}
+
+	function Install-AuthModule {
+		# Determine if the PSIntuneAuth module needs to be installed
+		try {
+			Write-CMLogEntry -Value " - Attempting to locate PSIntuneAuth module" -Severity 1
+			$PSIntuneAuthModule = Get-InstalledModule -Name "PSIntuneAuth" -ErrorAction Stop -Verbose:$false
+			if ($PSIntuneAuthModule -ne $null) {
+				Write-CMLogEntry -Value " - Authentication module detected, checking for latest version" -Severity 1
+				$LatestModuleVersion = (Find-Module -Name "PSIntuneAuth" -ErrorAction SilentlyContinue -Verbose:$false).Version
+				if ($LatestModuleVersion -gt $PSIntuneAuthModule.Version) {
+					Write-CMLogEntry -Value " - Latest version of PSIntuneAuth module is not installed, attempting to install: $($LatestModuleVersion.ToString())" -Severity 1
+					$UpdateModuleInvocation = Update-Module -Name "PSIntuneAuth" -Scope CurrentUser -Force -ErrorAction Stop -Confirm:$false -Verbose:$false
+				}
+			}
+		}
+		catch [System.Exception] {
+			Write-CMLogEntry -Value " - Unable to detect PSIntuneAuth module, attempting to install from PSGallery" -Severity 2
+			try {
+				# Install NuGet package provider
+				$PackageProvider = Install-PackageProvider -Name "NuGet" -Force -Verbose:$false
+	
+				# Install PSIntuneAuth module
+				Install-Module -Name "PSIntuneAuth" -Scope AllUsers -Force -ErrorAction Stop -Confirm:$false -Verbose:$false
+				Write-CMLogEntry -Value " - Successfully installed PSIntuneAuth module" -Severity 1
+			}
+			catch [System.Exception] {
+				Write-CMLogEntry -Value " - An error occurred while attempting to install PSIntuneAuth module. Error message: $($_.Exception.Message)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+		}
+	}
+
+	function Get-AuthToken {
+		try {
+			# Attempt to install PSIntuneAuth module, if already installed ensure the latest version is being used
+			Install-AuthModule
+
+			# Retrieve authentication token
+			Write-CMLogEntry -Value " - Attempting to retrieve authentication token using native client with ID: $($ClientID)" -Severity 1
+			$Script:AuthToken = Get-MSIntuneAuthToken -TenantName $TenantName -ClientID $ClientID -Credential $Credential -Resource "https://ConfigMgrService" -RedirectUri "https://login.microsoftonline.com/common/oauth2/nativeclient" -ErrorAction Stop
+			Write-CMLogEntry -Value " - Successfully retrieved authentication token" -Severity 1
+		}
+		catch [System.Exception] {
+			Write-CMLogEntry -Value " - Failed to retrieve authentication token. Error message: $($PSItem.Exception.Message)" -Severity 3
+
+			# Throw terminating error
+			$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+			$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+		}
+	}
+
+	function Get-AuthCredential {
+		# Construct PSCredential object for authentication
+		$EncryptedPassword = ConvertTo-SecureString -String $Script:Password -AsPlainText -Force
+		$Script:Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList @($Script:UserName, $EncryptedPassword)
+	}
+	
+	function Get-AdminServiceItem {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the resource for the AdminService API call, e.g. '/SMS_Package'.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$Resource
+		)
+		# Construct array object to hold return value
+		$PackageArray = New-Object -TypeName System.Collections.ArrayList
+
+		switch ($Script:AdminServiceEndpointType) {
+			"External" {							
+				try {
+					$AdminServiceUri = $AdminServiceURL + $Resource
+					Write-CMLogEntry -Value " - Calling AdminService endpoint with URI: $($AdminServiceUri)" -Severity 1
+					$AdminServiceResponse = Invoke-RestMethod -Method Get -Uri $AdminServiceUri -Headers $AuthToken -ErrorAction Stop
+				}
+				catch [System.Exception] {
+					Write-CMLogEntry -Value " - Failed to retrieve available package items from AdminService endpoint. Error message: $($PSItem.Exception.Message)" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}
+			"Internal" {
+				$AdminServiceUri = $AdminServiceURL + $Resource
+				Write-CMLogEntry -Value " - Calling AdminService endpoint with URI: $($AdminServiceUri)" -Severity 1
+
+				try {
+					# Call AdminService endpoint to retrieve package data
+					$AdminServiceResponse = Invoke-RestMethod -Method Get -Uri $AdminServiceUri -Credential $Credential -ErrorAction Stop
+				}
+				catch [System.Security.Authentication.AuthenticationException] {
+					Write-CMLogEntry -Value " - The remote AdminService endpoint certificate is invalid according to the validation procedure. Error message: $($PSItem.Exception.Message)" -Severity 2
+					Write-CMLogEntry -Value " - Will attempt to set the current session to ignore self-signed certificates and retry AdminService endpoint connection" -Severity 2
+
+					# Attempt to ignore self-signed certificate binding for AdminService
+					# Convert encoded base64 string for ignore self-signed certificate validation functionality
+					$CertificationValidationCallbackEncoded = "DQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0AOwANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAB1AHMAaQBuAGcAIABTAHkAcwB0AGUAbQAuAE4AZQB0ADsADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAdQBzAGkAbgBnACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAZQBjAHUAcgBpAHQAeQA7AA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAHUAcwBpAG4AZwAgAFMAeQBzAHQAZQBtAC4AUwBlAGMAdQByAGkAdAB5AC4AQwByAHkAcAB0AG8AZwByAGEAcABoAHkALgBYADUAMAA5AEMAZQByAHQAaQBmAGkAYwBhAHQAZQBzADsADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAcAB1AGIAbABpAGMAIABjAGwAYQBzAHMAIABTAGUAcgB2AGUAcgBDAGUAcgB0AGkAZgBpAGMAYQB0AGUAVgBhAGwAaQBkAGEAdABpAG8AbgBDAGEAbABsAGIAYQBjAGsADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAewANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAHAAdQBiAGwAaQBjACAAcwB0AGEAdABpAGMAIAB2AG8AaQBkACAASQBnAG4AbwByAGUAKAApAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAewANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAaQBmACgAUwBlAHIAdgBpAGMAZQBQAG8AaQBuAHQATQBhAG4AYQBnAGUAcgAuAFMAZQByAHYAZQByAEMAZQByAHQAaQBmAGkAYwBhAHQAZQBWAGEAbABpAGQAYQB0AGkAbwBuAEMAYQBsAGwAYgBhAGMAawAgAD0APQBuAHUAbABsACkADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAHsADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAUwBlAHIAdgBpAGMAZQBQAG8AaQBuAHQATQBhAG4AYQBnAGUAcgAuAFMAZQByAHYAZQByAEMAZQByAHQAaQBmAGkAYwBhAHQAZQBWAGEAbABpAGQAYQB0AGkAbwBuAEMAYQBsAGwAYgBhAGMAawAgACsAPQAgAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAZABlAGwAZQBnAGEAdABlAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAKAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAATwBiAGoAZQBjAHQAIABvAGIAagAsACAADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAFgANQAwADkAQwBlAHIAdABpAGYAaQBjAGEAdABlACAAYwBlAHIAdABpAGYAaQBjAGEAdABlACwAIAANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAWAA1ADAAOQBDAGgAYQBpAG4AIABjAGgAYQBpAG4ALAAgAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIABTAHMAbABQAG8AbABpAGMAeQBFAHIAcgBvAHIAcwAgAGUAcgByAG8AcgBzAA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAKQANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAHsADQAKACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgAHIAZQB0AHUAcgBuACAAdAByAHUAZQA7AA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAfQA7AA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAB9AA0ACgAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAfQANAAoAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAAgACAAIAB9AA0ACgAgACAAIAAgACAAIAAgACAA"
+					$CertificationValidationCallback = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($CertificationValidationCallbackEncoded))
+
+					# Load required type definition to be able to ignore self-signed certificate to circumvent issues with AdminService running with ConfigMgr self-signed certificate binding
+					Add-Type -TypeDefinition $CertificationValidationCallback
+					[ServerCertificateValidationCallback]::Ignore()
+
+					try {
+						# Call AdminService endpoint to retrieve package data
+						$AdminServiceResponse = Invoke-RestMethod -Method Get -Uri $AdminServiceUri -Credential $Credential -ErrorAction Stop
+					}
+					catch [System.Exception] {
+						Write-CMLogEntry -Value " - Failed to retrieve available package items from AdminService endpoint. Error message: $($PSItem.Exception.Message)" -Severity 3
+
+						# Throw terminating error
+						$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+						$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+					}
+				}
+				catch {
+					Write-CMLogEntry -Value " - Failed to retrieve available package items from AdminService endpoint. Error message: $($PSItem.Exception.Message)" -Severity 3
+
+					# Throw terminating error
+					$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+					$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+				}
+			}
+		}
+
+		# Add returned driver package objects to array list
+		if ($AdminServiceResponse.value -ne $null) {
+			foreach ($Package in $AdminServiceResponse.value) {
+				$PackageArray.Add($Package) | Out-Null
+			}
+		}
+
+		# Handle return value
+		return $PackageArray
+	}
+
+	function Get-OSImageDetails {
+		switch ($Script:DeploymentMode) {
+			"DriverUpdate" {
+				$OSImageDetails = [PSCustomObject]@{
+					Architecture = Get-OSArchitecture -InputObject (Get-WmiObject -Class Win32_OperatingSystem | Select-Object -ExpandProperty OSArchitecture)
+					Name = "Windows 10"
+					Version = Get-OSBuild -InputObject (Get-WmiObject -Class Win32_OperatingSystem | Select-Object -ExpandProperty Version)
+				}
+			}
+			default {
+				$OSImageDetails = [PSCustomObject]@{
+					Architecture = $Script:TargetOSArchitecture
+					Name = "Windows 10"
+					Version = $Script:TargetOSVersion
+				}
+			}
+		}
+		
+		# Handle output to log file for OS image details
+        Write-CMLogEntry -Value " - Target operating system name configured as: $($OSImageDetails.Name)" -Severity 1
+        Write-CMLogEntry -Value " - Target operating system architecture configured as: $($OSImageDetails.Architecture)" -Severity 1
+		Write-CMLogEntry -Value " - Target operating system version configured as: $($OSImageDetails.Version)" -Severity 1
+		
+		# Handle return value
+		return $OSImageDetails
+	}
+
+	function Get-OSBuild {
+		param (
+			[parameter(Mandatory = $true, HelpMessage = "OS version data to be translated.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$InputObject
+		)
+		switch (([System.Version]$InputObject).Build) {
+			"19042" {
+				$OSVersion = 2009
+			}
+			"19041" {
+				$OSVersion = 2004
+			}
+			"18363" {
+				$OSVersion = 1909
+			}
+			"18362" {
+				$OSVersion = 1903
+			}
+			"17763" {
+				$OSVersion = 1809
+			}
+			"17134" {
+				$OSVersion = 1803
+			}
+			"16299" {
+				$OSVersion = 1709
+			}
+			"15063" {
+				$OSVersion = 1703
+			}
+			"14393" {
+				$OSVersion = 1607
+			}
+			default {
+				Write-CMLogEntry -Value " - Unable to translate OS version using input object: $($InputObject)" -Severity 3
+				Write-CMLogEntry -Value " - Unsupported OS version detected, please reach out to the developers of this script" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+		}
+
+		# Handle return value from function
+		return $OSVersion
+	}
+	
+	function Get-OSArchitecture {
+		param (
+			[parameter(Mandatory = $true, HelpMessage = "OS architecture data to be translated.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$InputObject
+		)
+		switch -Wildcard ($InputObject) {
+			"9" {
+				$OSArchitecture = "x64"
+			}
+			"0" {
+				$OSArchitecture = "x86"
+			}
+			"64*" {
+				$OSArchitecture = "x64"
+			}
+			"32*" {
+				$OSArchitecture = "x86"
+			}
+			default {
+				Write-CMLogEntry -Value " - Unable to translate OS architecture using input object: $($InputObject)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+		}
+		
+		# Handle return value from function
+		return $OSArchitecture
+	}
+	
+	function Get-BIOSPackages {
+        try {
+            # Retrieve BIOS packages but filter out matches depending on script operational mode
+            switch ($OperationalMode) {
+				"Production" {
+					if ($Script:PSCmdlet.ParameterSetName -like "XMLPackage") {
+						Write-CMLogEntry -Value " - Reading XML content logic file BIOS package entries" -Severity 1				
+						$Packages = (([xml]$(Get-Content -Path $XMLPackageLogicFile -Raw)).ArrayOfCMPackage).CMPackage | Where-Object { $_.Name -notmatch "Pilot" -and $_.Name -notmatch "Legacy" -and $_.Name -match $Filter }
+					}
+					else {
+						Write-CMLogEntry -Value " - Querying AdminService for BIOS package instances" -Severity 1
+						$Packages = Get-AdminServiceItem -Resource "/SMS_Package?`$filter=contains(Name,'$($Filter)')" | Where-Object { $_.Name -notmatch "Pilot" -and $_.Name -notmatch "Retired" }
+					}
+
+                }
+                "Pilot" {
+					if ($Script:PSCmdlet.ParameterSetName -like "XMLPackage") {
+						Write-CMLogEntry -Value " - Reading XML content logic file BIOS package entries" -Severity 1		
+						$Packages = (([xml]$(Get-Content -Path $XMLPackageLogicFile -Raw)).ArrayOfCMPackage).CMPackage | Where-Object { $_.Name -match "Pilot" -and $_.Name -match $Filter }
+					}
+					else {
+						Write-CMLogEntry -Value " - Querying AdminService for BIOS package instances" -Severity 1
+						$Packages = Get-AdminServiceItem -Resource "/SMS_Package?`$filter=contains(Name,'$($Filter)')" | Where-Object { $_.Name -match "Pilot" }
+					}
+                }
+            }
+		
+			# Handle return value
+			if ($Packages -ne $null) {
+				Write-CMLogEntry -Value " - Retrieved a total of '$(($Packages | Measure-Object).Count)' BIOS packages from $($Script:PackageSource) matching operational mode: $($OperationalMode)" -Severity 1
+				return $Packages
+			}
+			else {
+				Write-CMLogEntry -Value " - Retrieved a total of '0' BIOS packages from $($Script:PackageSource) matching operational mode: $($OperationalMode)" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+        }
+        catch [System.Exception] {
+            Write-CMLogEntry -Value " - An error occurred while calling $($Script:PackageSource) for a list of available BIOS packages. Error message: $($_.Exception.Message)" -Severity 3
+
+            # Throw terminating error
+            $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+            $PSCmdlet.ThrowTerminatingError($ErrorRecord)
+        }        
+	}
+
+    function Get-ComputerData {
+		# Create a custom object for computer details gathered from local WMI
+		$ComputerDetails = [PSCustomObject]@{
+			Manufacturer = $null
+			Model = $null
+			SystemSKU = $null
+			FallbackSKU = $null
+		}
+		
+        # Gather computer details based upon specific computer manufacturer
+        $ComputerManufacturer = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Manufacturer).Trim()
+        switch -Wildcard ($ComputerManufacturer) {
+            "*Microsoft*" {
+				$ComputerDetails.Manufacturer = "Microsoft"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = Get-WmiObject -Namespace "root\wmi" -Class "MS_SystemInformation" | Select-Object -ExpandProperty SystemSKU
+            }
+            "*HP*" {
+                $ComputerDetails.Manufacturer = "HP"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace "root\WMI").BaseBoardProduct.Trim()
+            }
+            "*Hewlett-Packard*" {
+                $ComputerDetails.Manufacturer = "HP"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace "root\WMI").BaseBoardProduct.Trim()
+            }
+            "*Dell*" {
+                $ComputerDetails.Manufacturer = "Dell"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace "root\WMI").SystemSku.Trim()
+                [string]$OEMString = Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty OEMStringArray
+                $ComputerDetails.FallbackSKU = [regex]::Matches($OEMString, '\[\S*]')[0].Value.TrimStart("[").TrimEnd("]")                
+            }
+            "*Lenovo*" {
+                $ComputerDetails.Manufacturer = "Lenovo"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystemProduct" | Select-Object -ExpandProperty Version).Trim()
+                $ComputerDetails.SystemSKU = ((Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
+            }
+            "*Panasonic*" {
+                $ComputerDetails.Manufacturer = "Panasonic Corporation"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace "root\WMI").BaseBoardProduct.Trim()
+            }
+            "*Viglen*" {
+                $ComputerDetails.Manufacturer = "Viglen"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = (Get-WmiObject -Class "Win32_BaseBoard" | Select-Object -ExpandProperty SKU).Trim()
+			}
+			"*AZW*" { 
+				$ComputerDetails.Manufacturer = "AZW"
+				$ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+				$ComputerDetails.SystemSKU = (Get-CIMInstance -ClassName "MS_SystemInformation" -NameSpace root\WMI).BaseBoardProduct.Trim()
+			}
+			"*Fujitsu*" {
+                $ComputerDetails.Manufacturer = "Fujitsu"
+                $ComputerDetails.Model = (Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty Model).Trim()
+                $ComputerDetails.SystemSKU = (Get-WmiObject -Class "Win32_BaseBoard" | Select-Object -ExpandProperty SKU).Trim()
+			}
+		}
+		
+		# Handle overriding computer details if debug mode and additional parameters was specified
+		if ($Script:PSCmdlet.ParameterSetName -like "Debug") {
+			if (-not([string]::IsNullOrEmpty($Manufacturer))) {
+				$ComputerDetails.Manufacturer = $Manufacturer
+			}
+			if (-not([string]::IsNullOrEmpty($ComputerModel))) {
+				$ComputerDetails.Model = $ComputerModel
+			}
+			if (-not([string]::IsNullOrEmpty($SystemSKU))) {
+				$ComputerDetails.SystemSKU = $SystemSKU
+			}
+		}		
+        
+        # Handle output to log file for computer details
+        Write-CMLogEntry -Value " - Computer manufacturer determined as: $($ComputerDetails.Manufacturer)" -Severity 1
+        Write-CMLogEntry -Value " - Computer model determined as: $($ComputerDetails.Model)" -Severity 1
+
+        # Handle output to log file for computer SystemSKU
+        if (-not([string]::IsNullOrEmpty($ComputerDetails.SystemSKU))) {
+            Write-CMLogEntry -Value " - Computer SystemSKU determined as: $($ComputerDetails.SystemSKU)" -Severity 1
+        }
+        else {
+            Write-CMLogEntry -Value " - Computer SystemSKU determined as: <null>" -Severity 2
+        }
+
+        # Handle output to log file for Fallback SKU
+        if (-not([string]::IsNullOrEmpty($ComputerDetails.FallBackSKU))) {
+            Write-CMLogEntry -Value " - Computer Fallback SystemSKU determined as: $($ComputerDetails.FallBackSKU)" -Severity 1
+		}
+		
+		# Handle return value from function
+		return $ComputerDetails
+    }
+
+    function Get-ComputerSystemType {
+        $ComputerSystemType = Get-WmiObject -Class "Win32_ComputerSystem" | Select-Object -ExpandProperty "Model"
+        if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM", "VMWare7,1")) {
+            Write-CMLogEntry -Value " - Supported computer platform detected, script execution allowed to continue" -Severity 1
+        }
+        else {
+			if ($Script:PSCmdlet.ParameterSetName -like "Debug") {
+				Write-CMLogEntry -Value " - Unsupported computer platform detected, virtual machines are not supported but will be allowed in DebugMode" -Severity 2
+			}
+			else {
+				Write-CMLogEntry -Value " - Unsupported computer platform detected, virtual machines are not supported" -Severity 3
+
+				# Throw terminating error
+				$ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+				$PSCmdlet.ThrowTerminatingError($ErrorRecord)
+			}
+        }
+	}
+
+    function Test-ComputerDetails {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer details object from Get-ComputerDetails function.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$InputObject
+		)
+        # Construct custom object for computer details validation
+        $Script:ComputerDetection = [PSCustomObject]@{
+            "ModelDetected" = $false
+            "SystemSKUDetected" = $false
+        }
+
+        if (($InputObject.Model -ne $null) -and (-not([System.String]::IsNullOrEmpty($InputObject.Model)))) {
+            Write-CMLogEntry -Value " - Computer model detection was successful" -Severity 1
+            $ComputerDetection.ModelDetected = $true
+        }
+
+        if (($InputObject.SystemSKU -ne $null) -and (-not([System.String]::IsNullOrEmpty($InputObject.SystemSKU)))) {
+            Write-CMLogEntry -Value " - Computer SystemSKU detection was successful" -Severity 1
+            $ComputerDetection.SystemSKUDetected = $true
+        }
+
+        if (($ComputerDetection.ModelDetected -eq $false) -and ($ComputerDetection.SystemSKUDetected -eq $false)) {
+            Write-CMLogEntry -Value " - Computer model and SystemSKU values are missing, script execution is not allowed since required values to continue could not be gathered" -Severity 3
+            
+            # Throw terminating error
+            $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+            $PSCmdlet.ThrowTerminatingError($ErrorRecord)
+        }
+        else {
+            Write-CMLogEntry -Value " - Computer details successfully verified" -Severity 1
+        }
+    }
+
+    function Set-ComputerDetectionMethod {
+        if ($ComputerDetection.SystemSKUDetected -eq $true) {
+			Write-CMLogEntry -Value " - Determined primary computer detection method: SystemSKU" -Severity 1
+			return "SystemSKU"
+        }
+        else {
+			Write-CMLogEntry -Value " - Determined fallback computer detection method: ComputerModel" -Severity 1
+            return "ComputerModel"
+        }
+	}
+	
+	function Confirm-OSVersion {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the OS version value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData,
+
+			[parameter(Mandatory = $false, HelpMessage = "Set to True to check for drivers packages that matches earlier versions of Windows than what's detected from web service call.")]
+			[ValidateNotNullOrEmpty()]
+			[bool]$OSVersionFallback = $false			
+		)
+		if ($OSVersionFallback -eq $true) {
+			if ([int]$DriverPackageInput -lt [int]$OSImageData.Version) {
+				# OS version match found where driver package input was less than input from OSImageData version
+				Write-CMLogEntry -Value " - Matched operating system version: $($DriverPackageInput)" -Severity 1
+				return $true
+			}
+			else {
+				# OS version match was not found
+				return $false
+			}
+		}
+		else {
+			if ($DriverPackageInput -like $OSImageData.Version) {
+				# OS version match found
+				Write-CMLogEntry -Value " - Matched operating system version: $($OSImageData.Version)" -Severity 1
+				return $true
+			}
+			else {
+				# OS version match was not found
+				return $false
+			}
+		}
+	}	
+
+	function Confirm-Architecture {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the Architecture value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData
+		)
+		if ($DriverPackageInput -like $OSImageData.Architecture) {
+			# OS architecture match found
+			Write-CMLogEntry -Value " - Matched operating system architecture: $($OSImageData.Architecture)" -Severity 1
+			return $true
+		}
+		else {
+			# OS architecture match was not found
+			return $false
+		}
+	}
+
+	function Confirm-OSName {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the OS name value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$OSImageData
+		)
+		if ($DriverPackageInput -like $OSImageData.Name) {
+			# OS name match found
+			Write-CMLogEntry -Value " - Matched operating system name: $($OSImageData.Name)" -Severity 1
+			return $true
+		}
+		else {
+			# OS name match was not found
+			return $false
+		}
+	}
+
+	function Confirm-ComputerModel {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer model value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$ComputerData
+		)
+		# Construct custom object for return value
+		$ModelDetectionResult = [PSCustomObject]@{
+			Detected = $null
+		}
+
+		if ($DriverPackageInput -like $ComputerData.Model) {
+			# Computer model match found
+			Write-CMLogEntry -Value " - Matched computer model: $($ComputerData.Model)" -Severity 1
+
+			# Set properties for custom object for return value
+			$ModelDetectionResult.Detected = $true
+
+			return $ModelDetectionResult
+		}
+		else {
+			# Computer model match was not found
+			# Set properties for custom object for return value
+			$ModelDetectionResult.Detected = $false
+
+			return $ModelDetectionResult
+		}
+	}
+
+	function Confirm-SystemSKU {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the SystemSKU value from the driver package object.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$DriverPackageInput,
+	
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer data object.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$ComputerData
+		)
+	
+		# Handle multiple SystemSKU's from driver package input and determine the proper delimiter
+		if ($DriverPackageInput -match ",") {
+			$SystemSKUDelimiter = ","
+		}
+		if ($DriverPackageInput -match ";") {
+			$SystemSKUDelimiter = ";"
+		}
+	
+		# Remove any space characters from driver package input data, replace them with a comma instead and ensure there's no duplicate entries
+		$DriverPackageInputArray = $DriverPackageInput.Replace(" ", ",").Split($SystemSKUDelimiter) | Select-Object -Unique
+	
+		# Construct custom object for return value
+		$SystemSKUDetectionResult = [PSCustomObject]@{
+			Detected = $null
+			SystemSKUValue = $null
+		}
+	
+		# Attempt to determine if the driver package input matches with the computer data input and account for multiple SystemSKU's by separating them with the detected delimiter
+		if (-not([string]::IsNullOrEmpty($SystemSKUDelimiter))) {
+			# Construct table for keeping track of matched SystemSKU items
+			$SystemSKUTable = @{}
+	
+			# Attempt to match for each SystemSKU item based on computer data input
+			foreach ($SystemSKUItem in $DriverPackageInputArray) {
+				if ($ComputerData.SystemSKU -match $SystemSKUItem) {
+					# Add key value pair with match success
+					$SystemSKUTable.Add($SystemSKUItem, $true)
+	
+					# Set custom object property with SystemSKU value that was matched on the detection result object
+					$SystemSKUDetectionResult.SystemSKUValue = $SystemSKUItem
+				}
+				else {
+					# Add key value pair with match failure
+					$SystemSKUTable.Add($SystemSKUItem, $false)
+				}
+			}
+	
+			# Check if table contains a matched SystemSKU
+			if ($SystemSKUTable.Values -contains $true) {
+				# SystemSKU match found based upon multiple items detected in computer data input
+				Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.SystemSKU)" -Severity 1
+	
+				# Set custom object property that SystemSKU value that was matched on the detection result object
+				$SystemSKUDetectionResult.Detected = $true
+				
+				return $SystemSKUDetectionResult
+			}
+			else {
+				# SystemSKU match was not found based upon multiple items detected in computer data input
+				# Set properties for custom object for return value
+				$SystemSKUDetectionResult.SystemSKUValue = ""
+				$SystemSKUDetectionResult.Detected = $false
+	
+				return $SystemSKUDetectionResult
+			}
+		}
+		elseif ($DriverPackageInput -match $ComputerData.SystemSKU) {
+			# SystemSKU match found based upon single item detected in computer data input
+			Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.SystemSKU)" -Severity 1
+	
+			# Set properties for custom object for return value
+			$SystemSKUDetectionResult.SystemSKUValue = $ComputerData.SystemSKU
+			$SystemSKUDetectionResult.Detected = $true
+	
+			return $SystemSKUDetectionResult
+		}
+		elseif ((-not([string]::IsNullOrEmpty($ComputerData.FallbackSKU))) -and ($DriverPackageInput -match $ComputerData.FallbackSKU)) {
+			# SystemSKU match found using FallbackSKU value using detection method OEMString, this should only be valid for Dell
+			Write-CMLogEntry -Value " - Matched SystemSKU: $($ComputerData.FallbackSKU)" -Severity 1
+	
+			# Set properties for custom object for return value
+			$SystemSKUDetectionResult.SystemSKUValue = $ComputerData.FallbackSKU
+			$SystemSKUDetectionResult.Detected = $true
+			
+			return $SystemSKUDetectionResult
+		}
+		else {
+			# None of the above methods worked to match SystemSKU from driver package input with computer data input
+			# Set properties for custom object for return value
+			$SystemSKUDetectionResult.SystemSKUValue = ""
+			$SystemSKUDetectionResult.Detected = $false
+	
+			return $SystemSKUDetectionResult
+		}
+	}
+
 	function Compare-BIOSVersion {
 		param (
 			[parameter(Mandatory = $false, HelpMessage = "Current available BIOS version.")]
@@ -299,25 +1243,23 @@ Process {
 				# Compare current BIOS release to available
 				if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
 					# Write output to task sequence variable
-					if ($DebugMode -ne $true) {
-						$TSEnvironment.Value("NewBIOSAvailable") = $true
-					}					
-					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
-				}
-			}
-			elseif ($CurrentBIOSVersion -like "A*") {
-				# Compare current BIOS release to available
-				if ($AvailableBIOSVersion -like "*.*.*") {
-					# Assume that the bios is new as moving from Axx to x.x.x formats
-					# Write output to task sequence variable
-					if ($DebugMode -ne $true) {
+					if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 						$TSEnvironment.Value("NewBIOSAvailable") = $true
 					}
 					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
 				}
-				elseif ($AvailableBIOSVersion -gt $CurrentBIOSVersion) {
+			} elseif ($CurrentBIOSVersion -like "A*") {
+				# Compare current BIOS release to available
+				if ($AvailableBIOSVersion -like "*.*.*") {
+					# Assume that the bios is new as moving from Axx to x.x.x formats
 					# Write output to task sequence variable
-					if ($DebugMode -ne $true) {
+					if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
+						$TSEnvironment.Value("NewBIOSAvailable") = $true
+					}
+					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
+				} elseif ($AvailableBIOSVersion -gt $CurrentBIOSVersion) {
+					# Write output to task sequence variable
+					if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 						$TSEnvironment.Value("NewBIOSAvailable") = $true
 					}
 					Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
@@ -334,29 +1276,28 @@ Process {
 			# Compare current BIOS release to available
 			if ($AvailableBIOSReleaseDate -gt $CurrentBIOSReleaseDate) {
 				# Write output to task sequence variable
-				if ($DebugMode -ne $true) {
+				if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 					$TSEnvironment.Value("NewBIOSAvailable") = $true
 				}
 				Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current date release dated $($CurrentBIOSReleaseDate) will be replaced by release $($AvailableBIOSReleaseDate)." -Severity 1
 			}
 		}
 		
-		if ($ComputerManufacturer -match "Hewlett-Packard") {
+		if ($ComputerManufacturer -match "Hewlett-Packard|HP") {
 			# Obtain current BIOS release
 			$CurrentBIOSProperties = (Get-WmiObject -Class Win32_BIOS | Select-Object -Property *)
-
+			
 			# Update version formatting
 			$AvailableBIOSVersion = $AvailableBIOSVersion.TrimEnd(".")
 			$AvailableBIOSVersion = $AvailableBIOSVersion.Split(" ")[0]
-
+			
 			# Detect new versus old BIOS formats
 			switch -wildcard ($($CurrentBIOSProperties.SMBIOSBIOSVersion)) {
 				"*ver*" {
 					if ($CurrentBIOSProperties.SMBIOSBIOSVersion -match '.F.\d+$') {
 						$CurrentBIOSVersion = ($CurrentBIOSProperties.SMBIOSBIOSVersion -split "Ver.")[1].Trim()
 						$BIOSVersionParseable = $false
-					}
-					else {
+					} else {
 						$CurrentBIOSVersion = [System.Version]::Parse(($CurrentBIOSProperties.SMBIOSBIOSVersion).TrimStart($CurrentBIOSProperties.SMBIOSBIOSVersion.Split(".")[0]).TrimStart(".").Trim().Split(" ")[0])
 						$BIOSVersionParseable = $true
 					}
@@ -366,8 +1307,9 @@ Process {
 					$BIOSVersionParseable = $true
 				}
 			}
-
+			
 			# Output version details
+			$CurrentBIOSVersion = "01.01.01"
 			Write-CMLogEntry -Value "Current BIOS release detected as $($CurrentBIOSVersion)." -Severity 1
 			Write-CMLogEntry -Value "Available BIOS release detected as $($AvailableBIOSVersion)." -Severity 1
 			
@@ -376,7 +1318,7 @@ Process {
 				$true {
 					if ([System.Version]$AvailableBIOSVersion -gt [System.Version]$CurrentBIOSVersion) {
 						# Write output to task sequence variable
-						if ($DebugMode -ne $true) {
+						if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 							$TSEnvironment.Value("NewBIOSAvailable") = $true
 						}
 						Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
@@ -385,7 +1327,7 @@ Process {
 				$false {
 					if ([System.Int32]::Parse($AvailableBIOSVersion.TrimStart("F.")) -gt [System.Int32]::Parse($CurrentBIOSVersion.TrimStart("F."))) {
 						# Write output to task sequence variable
-						if ($DebugMode -ne $true) {
+						if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 							$TSEnvironment.Value("NewBIOSAvailable") = $true
 						}
 						Write-CMLogEntry -Value "A new version of the BIOS has been detected. Current release $($CurrentBIOSVersion) will be replaced by $($AvailableBIOSVersion)." -Severity 1
@@ -395,109 +1337,53 @@ Process {
 		}
 	}
 	
-	# Write log file for script execution
-	Write-CMLogEntry -Value "SCConfigMgr Invoke-CMDownloadBIOSPackage Version $($ScriptVersion)" -Severity 1
-	Write-CMLogEntry -Value "BIOS download package process initiated" -Severity 1
+	function Get-BIOSUpdate{
+			param(
+			[parameter(Mandatory = $true, HelpMessage = "Specify the computer details object from Get-ComputerDetails function.")]
+			[ValidateNotNullOrEmpty()]
+			[PSCustomObject]$InputObject
+		)
+
+	# Define machine matching values
+	$ComputerSystemType = $InputObject.Model
+	$ComputerManufacturer = $InputObject.Manufacturer
+	$SystemSKU = $InputObject.SystemSKU
 	
-	# Determine manufacturer
-	$ComputerManufacturer = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Manufacturer).Trim()
-	Write-CMLogEntry -Value "Manufacturer determined as: $($ComputerManufacturer)" -Severity 1
+	# Supported manufacturers
+	$Manufacturers = @("Dell","Hewlett-Packard","Lenovo","Microsoft","HP")
 	
-	# Determine manufacturer name and hardware information
-	switch -Wildcard ($ComputerManufacturer) {
-		"*Microsoft*" {
-			$ComputerManufacturer = "Microsoft"
-			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			#$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
-		}
-		"*HP*" {
-			$ComputerManufacturer = "Hewlett-Packard"
-			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
-		}
-		"*Hewlett-Packard*" {
-			$ComputerManufacturer = "Hewlett-Packard"
-			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).BaseBoardProduct.Trim()
-		}
-		"*Dell*" {
-			$ComputerManufacturer = "Dell"
-			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			$SystemSKU = (Get-CIMInstance -ClassName MS_SystemInformation -NameSpace root\WMI).SystemSku.Trim()
-		}
-		"*Lenovo*" {
-			$ComputerManufacturer = "Lenovo"
-			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version).Trim()
-			$SystemSKU = ((Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).SubString(0, 4)).Trim()
-		}
-	}
-	Write-CMLogEntry -Value "Computer model determined as: $($ComputerModel)" -Severity 1
-	Write-CMLogEntry -Value "Computer SKU determined as: $($SystemSKU)" -Severity 1
-	
-	# Supported Manufacturer Array
-	$Manufacturers = @("Dell", "Hewlett-Packard", "Lenovo","Microsoft")
-	
-	# Get existing BIOS version
-	$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
-	Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion)" -Severity 1
-	
-	# Construct new web service proxy
-	try {
-		$WebService = New-WebServiceProxy -Uri $URI -ErrorAction Stop
-	}
-	catch [System.Exception] {
-		Write-CMLogEntry -Value "Unable to establish a connection to ConfigMgr WebService. Error message: $($_.Exception.Message)" -Severity 3; exit 1
-	}
-	
-	# Call web service for a list of packages
-	try {
-		$Packages = $WebService.GetCMPackage($SecretKey, "$($Filter)")
-		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) BIOS packages from web service" -Severity 1
-	}
-	catch [System.Exception] {
-		Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService for a list of available packages. Error message: $($_.Exception.Message)" -Severity 3; exit 1
-	}
-	
-	# Construct array list for matching packages
 	$PackageList = New-Object -TypeName System.Collections.ArrayList
-	
-	# Set script error preference variable
-	$ErrorActionPreference = "Stop"
-	
-	# Validate supported system was detected
-	# Validate not virtual machine
-	$ComputerSystemType = Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty "Model"
 	
 	if ($ComputerSystemType -notin @("Virtual Machine", "VMware Virtual Platform", "VirtualBox", "HVM domU", "KVM")) {
 		# Process packages returned from web service
-		if ($Packages -ne $null) {
+		if ($BIOSPackages -ne $null) {
 			if (($ComputerModel -ne $null) -and (-not ([System.String]::IsNullOrEmpty($ComputerModel))) -or (($SystemSKU -ne $null) -and (-not ([System.String]::IsNullOrEmpty($SystemSKU))))) {
 				# Determine computer model detection
 				if ([System.String]::IsNullOrEmpty($SystemSKU)) {
 					Write-CMLogEntry -Value "Attempting to find a match for BIOS package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
 					Write-CMLogEntry -Value "Computer detection method set to use ComptuerModel" -Severity 1
 					$ComputerDetectionMethod = "ComputerModel"
-				}
-				else {
+				} else {
 					Write-CMLogEntry -Value "Attempting to find a match for BIOS package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
 					Write-CMLogEntry -Value "Computer detection method set to use SystemSKU" -Severity 1
 					$ComputerDetectionMethod = "SystemSKU"
 				}
 				
 				# Add packages with matching criteria to list
-				foreach ($Package in $Packages) {
-					Write-CMLogEntry -Value "Attempting to find a match for BIOS package: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+				foreach ($Package in $BIOSPackages) {
+					Write-CMLogEntry -Value "Attempting to find a match for BIOS package: $($Package.Name) ($($Package.PackageID)) $($Package.Version)" -Severity 1
 					
 					# Computer detection method matching
 					$ComputerDetectionResult = $false
 					switch ($ComputerManufacturer) {
 						"Hewlett-Packard" {
-							$PackageNameComputerModel = $Package.PackageName.Replace("Hewlett-Packard", "HP").Split("-").Trim()[1]
+							$PackageNameComputerModel = $Package.Name.Replace("Hewlett-Packard", "HP").Split("-").Trim()[1]
 						}
 						Default {
-							$PackageNameComputerModel = $Package.PackageName.Split("-", 2).Replace($ComputerManufacturer, "").Trim()[1]
+							$PackageNameComputerModel = $Package.Name.Split("-", 2).Replace($ComputerManufacturer, "").Trim()[1]
 						}
 					}
+					
 					switch ($ComputerDetectionMethod) {
 						"ComputerModel" {
 							if ($PackageNameComputerModel -like $ComputerModel) {
@@ -506,11 +1392,10 @@ Process {
 							}
 						}
 						"SystemSKU" {
-							if ($Package.PackageDescription -match $SystemSKU) {
+							if ($Package.Description -match $SystemSKU) {
 								Write-CMLogEntry -Value "Match found for computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 1
 								$ComputerDetectionResult = $true
-							}
-							else {
+							} else {
 								Write-CMLogEntry -Value "Unable to match computer model using detection method: $($ComputerDetectionMethod) ($($SystemSKU))" -Severity 2
 								if ($PackageNameComputerModel -like $ComputerModel) {
 									Write-CMLogEntry -Value "Fallback from SystemSKU match found for computer model instead using detection method: $($ComputerDetectionMethod) ($($ComputerModel))" -Severity 1
@@ -520,106 +1405,96 @@ Process {
 						}
 					}
 					
-					if ($ComputerDetectionResult -eq $true)  {
+					if ($ComputerDetectionResult -eq $true) {
 						# Match model, manufacturer criteria
 						if ($Manufacturers -contains $ComputerManufacturer) {
-							if ($ComputerManufacturer -match $Package.PackageManufacturer) {
-								Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.PackageName) ($($Package.PackageID))" -Severity 1
+							if ($ComputerManufacturer -match $Package.Manufacturer) {
+								Write-CMLogEntry -Value "Match found for computer model and manufacturer: $($Package.Name) ($($Package.PackageID))" -Severity 1
 								$PackageList.Add($Package) | Out-Null
-							}
-							else {
+							} else {
 								Write-CMLogEntry -Value "Package does not meet computer model and manufacturer criteria: $($Package.PackageName) ($($Package.PackageID))" -Severity 2
 							}
 						}
 					}
-
+					
 				}
 				
 				# Process matching items in package list and set task sequence variable
 				if ($PackageList.Count -ge 1) {
+					Write-CMLogEntry -Value "[BIOSValidation]: Starting BIOS package validation phase" -Severity 1
 					# Determine the most current package from list
 					if ($PackageList.Count -eq 1) {
 						Write-CMLogEntry -Value "BIOS package list contains a single match, attempting to set task sequence variable" -Severity 1
-						
+
 						# Check if BIOS package is newer than currently installed
 						if ($ComputerManufacturer -match "Dell") {
-							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
-						}
-						elseif ($ComputerManufacturer -match "Lenovo") {
-							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -AvailableBIOSReleaseDate $(($PackageList[0].PackageDescription).Split(":")[2].Trimend(")")) -ComputerManufacturer $ComputerManufacturer
-						}
-						elseif ($ComputerManufacturer -match "Hewlett-Packard") {
-							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
-						}
-						elseif ($ComputerManufacturer -match "Microsoft") {
+							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].Version -ComputerManufacturer $ComputerManufacturer
+						} elseif ($ComputerManufacturer -match "Lenovo") {
+							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].Version -AvailableBIOSReleaseDate $(($PackageList[0].Description).Split(":")[2].Trimend(")")) -ComputerManufacturer $ComputerManufacturer
+						} elseif ($ComputerManufacturer -match "Hewlett-Packard|HP") {
+							Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].Version -ComputerManufacturer $ComputerManufacturer
+						} elseif ($ComputerManufacturer -match "Microsoft") {
 							$NewBIOSAvailable = $true
 						}
-						
-						if (-not ($PSBoundParameters["DebugMode"])) {
+ 
+						if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 							if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
-								
 								# Attempt to download BIOS package content
 								$DownloadInvocation = Invoke-CMDownloadContent -PackageID $($PackageList[0].PackageID) -DestinationLocationType Custom -DestinationVariableName "OSDBIOSPackage" -CustomLocationPath "%_SMSTSMDataPath%\BIOSPackage"
 								try {
 									# Check for successful package download
 									if ($DownloadInvocation -eq 0) {
 										Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Update located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
-									}
-									else {
+										Write-CMLogEntry -Value "[BIOSPackageDownload]: Completed BIOS package download phase" -Severity 1
+									} else {
 										Write-CMLogEntry -Value "BIOS update package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
 									}
-								}
-								catch [System.Exception] {
+								} catch [System.Exception] {
 									Write-CMLogEntry -Value "An error occurred while downloading the BIOS update (single package match). Error message: $($_.Exception.Message)" -Severity 3; exit 14
 								}
-							}
-							else {
+							} else {
 								Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
 							}
+						}else{
+								Write-CMLogEntry -Value "Task sequence engine would have been instructed to download package ID $($PackageList[0].PackageID) to %_SMSTSMDataPath%\BIOSPackage" -Severity 1
 						}
-					}
-					elseif ($PackageList.Count -ge 2) {
+ 
+					} elseif ($PackageList.Count -ge 2) {
 						Write-CMLogEntry -Value "BIOS package list contains multiple matches, attempting to set task sequence variable" -Severity 1
 						
 						# Determine the latest BIOS package by creation date
 						if ($ComputerManufacturer -match "Dell") {
-							$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
-						}
-						elseif ($ComputerManufacturer -eq "Lenovo") {
+							$PackageList = $PackageList | Sort-Object -Property SourceDate -Descending | Select-Object -First 1
+						} elseif ($ComputerManufacturer -eq "Lenovo") {
 							$ComputerDescription = Get-WmiObject -Class Win32_ComputerSystemProduct | Select-Object -ExpandProperty Version
 							# Attempt to find exact model match for Lenovo models which overlap model types
 							$PackageList = $PackageList | Where-object {
-								($_.PackageName -like "*$ComputerDescription") -and ($_.PackageManufacturer -match $ComputerManufacturer)
-							} | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
+								($_.Name -like "*$ComputerDescription") -and ($_.Manufacturer -match $ComputerManufacturer)
+							} | Sort-object -Property SourceDate -Descending | Select-Object -First 1
 							
 							If ($PackageList -eq $null) {
 								# Fall back to select the latest model type match if no model name match is found
-								$PackageList = $PackageList | Sort-object -Property PackageVersion -Descending | Select-Object -First 1
+								$PackageList = $PackageList | Sort-object -Property SourceDate -Descending | Select-Object -First 1
 							}
-						}
-						elseif ($ComputerManufacturer -match "Hewlett-Packard") {
+						} elseif ($ComputerManufacturer -match "Hewlett-Packard|HP") {
 							# Determine the latest BIOS package by creation date
 							$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
-						}
-						elseif ($ComputerManufacturer -match "Microsoft") {
+						} elseif ($ComputerManufacturer -match "Microsoft") {
 							$PackageList = $PackageList | Sort-Object -Property PackageCreated -Descending | Select-Object -First 1
 						}
 						if ($PackageList.Count -eq 1) {
 							# Check if BIOS package is newer than currently installed
 							if ($ComputerManufacturer -match "Dell") {
-								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
-							}
-							elseif ($ComputerManufacturer -match "Lenovo") {
-								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -AvailableBIOSReleaseDate $(($PackageList[0].PackageDescription).Split(":")[2]).Trimend(")") -ComputerManufacturer $ComputerManufacturer
-							}
-							elseif ($ComputerManufacturer -match "Hewlett-Packard") {
-								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].PackageVersion -ComputerManufacturer $ComputerManufacturer
-							}
-							elseif ($ComputerManufacturer -match "Microsoft") {
+								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].Version -ComputerManufacturer $ComputerManufacturer
+							} elseif ($ComputerManufacturer -match "Lenovo") {
+								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].Version -AvailableBIOSReleaseDate $(($PackageList[0].PackageDescription).Split(":")[2]).Trimend(")") -ComputerManufacturer $ComputerManufacturer
+							} elseif ($ComputerManufacturer -match "Hewlett-Packard|HP") {
+								Compare-BIOSVersion -AvailableBIOSVersion $PackageList[0].Version -ComputerManufacturer $ComputerManufacturer
+							} elseif ($ComputerManufacturer -match "Microsoft") {
 								$NewBIOSAvailable = $true
 							}
 							
-							if (-not ($PSBoundParameters["DebugMode"])) {
+							if ($Script:PSCmdlet.ParameterSetName -notlike "Debug") {
 								if ($TSEnvironment.Value("NewBIOSAvailable") -eq $true) {
 									$DownloadInvocation = Invoke-CMDownloadContent -PackageID $($PackageList[0].PackageID) -DestinationLocationType Custom -DestinationVariableName "OSDBIOSPackage" -CustomLocationPath "%_SMSTSMDataPath%\BIOSPackage"
 									
@@ -627,41 +1502,129 @@ Process {
 										# Check for successful package download
 										if ($DownloadInvocation -eq 0) {
 											Write-CMLogEntry -Value "BIOS update package content downloaded successfully. Package located in: $($TSEnvironment.Value('OSDBIOSPackage01'))" -Severity 1
-										}
-										else {
+										} else {
 											Write-CMLogEntry -Value "BIOS package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
 										}
-									}
-									catch [System.Exception] {
+									} catch [System.Exception] {
 										Write-CMLogEntry -Value "An error occurred while applying BIOS (multiple package match). Error message: $($_.Exception.Message)" -Severity 3; exit 15
 									}
-								}
-								else {
+								} else {
 									Write-CMLogEntry -Value "BIOS is already up to date with the latest $($PackageList[0].PackageVersion) version" -Severity 1
 								}
+							}else{
+								Write-CMLogEntry -Value "Task sequence engine would have been instructed to download package ID $($PackageList[0].PackageID) to %_SMSTSMDataPath%\BIOSPackage" -Severity 1
 							}
-						}
-						else {
+						} else {
 							Write-CMLogEntry -Value "Unable to determine a matching BIOS package from list since an unsupported count was returned from package list, bailing out" -Severity 2; exit 1
 						}
-					}
-					else {
+					} else {
 						Write-CMLogEntry -Value "Empty BIOS package list detected, bailing out" -Severity 1
 					}
-				}
-				else {
+				} else {
 					Write-CMLogEntry -Value "BIOS package list returned from web service did not contain any objects matching the computer model and manufacturer, bailing out" -Severity 1
 				}
-			}
-			else {
+			} else {
 				Write-CMLogEntry -Value "This script is supported on Dell, Lenovo and HP systems only at this point, bailing out" -Severity 1
 			}
 		}
 	}
+	}
+
+	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply BIOS Package process initiated" -Severity 1
+	if ($PSCmdLet.ParameterSetName -like "Debug") {
+		Write-CMLogEntry -Value " - Apply BIOS package process initiated in debug mode" -Severity 1
+	}	
+	Write-CMLogEntry -Value " - Apply BIOS package deployment type: $($PSCmdLet.ParameterSetName)" -Severity 1
+	Write-CMLogEntry -Value " - Apply BIOS package operational mode: $($OperationalMode)" -Severity 1
+
+	# Set script error preference variable
+	$ErrorActionPreference = "Stop"
+
+    try {
+		Write-CMLogEntry -Value "[PrerequisiteChecker]: Starting environment prerequisite checker" -Severity 1
+		
+		# Determine the deployment type mode for driver package installation
+		Get-DeploymentType
+
+        # Determine if running on supported computer system type
+		Get-ComputerSystemType
+
+		# Determine computer manufacturer, model, SystemSKU and FallbackSKU
+		$ComputerData = Get-ComputerData
+
+        # Validate required computer details have successfully been gathered from WMI
+        Test-ComputerDetails -InputObject $ComputerData
+
+        # Determine the computer detection method to be used for matching against driver packages
+        $ComputerDetectionMethod = Set-ComputerDetectionMethod
+
+        Write-CMLogEntry -Value "[PrerequisiteChecker]: Completed environment prerequisite checker" -Severity 1
+
+		if ($Script:PSCmdLet.ParameterSetName -notlike "XMLPackage") {
+			Write-CMLogEntry -Value "[AdminService]: Starting AdminService endpoint phase" -Severity 1
+
+			# Detect AdminService endpoint type
+			Get-AdminServiceEndpointType
+
+			# Determine if required values to connect to AdminService are provided
+			Test-AdminServiceData
+
+			# Determine the AdminService endpoint URL based on endpoint type
+			Set-AdminServiceEndpointURL
+
+			# Construct PSCredential object for AdminService authentication, this is required for both endpoint types
+			Get-AuthCredential
+
+			# Attempt to retrieve an authentication token for external AdminService endpoint connectivity
+			# This will only execute when the endpoint type has been detected as External, which means that authentication is needed against the Cloud Management Gateway
+			if ($Script:AdminServiceEndpointType -like "External") {
+				Get-AuthToken
+			}
+
+			Write-CMLogEntry -Value "[AdminService]: Completed AdminService endpoint phase" -Severity 1
+		}
+		Write-CMLogEntry -Value "[BIOSPackage]: Starting BIOS package retrieval using method: $($Script:PackageSource)" -Severity 1
+
+        # Retrieve available BIOS packages from admin service
+		$BIOSPackages = Get-BIOSPackages
+				
+		# Get existing BIOS version
+		#$CurrentBIOSVersion = (Get-WmiObject -Class Win32_BIOS | Select-Object -ExpandProperty SMBIOSBIOSVersion).Trim()
+		$CurrentBIOSVersion = "01.04.01"
+		Write-CMLogEntry -Value "Current BIOS version determined as: $($CurrentBIOSVersion)" -Severity 1
+		$ComputerData = $ComputerData | Select-Object -first 1
+		
+		# Determine if a newer BIOS release is available
+		Get-BIOSUpdate -InputObject $ComputerData
+		Write-CMLogEntry -Value "[BIOSPackage]: Completed BIOS package matching phase" -Severity 1
+		Write-CMLogEntry -Value "[BIOSPackageValidation]: Completed BIOS package validation phase" -Severity 1
+
+		# At this point, the code below here is not allowed to be executed in debug mode, as it requires access to the Microsoft.SMS.TSEnvironment COM object
+		if ($PSCmdLet.ParameterSetName -notlike "Debug") {
+			Write-CMLogEntry -Value "[BIOSPackageDownload]: Starting BIOS package download phase" -Severity 1
+
+			# Attempt to download the matched BIOS package content files from distribution point
+			$DriverPackageContentLocation = Invoke-DownloadDriverPackageContent
+			Write-CMLogEntry -Value "[BIOSPackageDownload]: Completed BIOS package download phase" -Severity 1
+		}
+		else {
+			Write-CMLogEntry -Value " - Script has successfully completed debug mode" -Severity 1
+		}
+
+    }
+    catch [System.Exception] {
+		Write-CMLogEntry -Value "[DownloadBIOSPackage]: BIOS detection process failed, please refer to previous error or warning messages" -Severity 3
+		
+		# Main try-catch block was triggered, this should cause the script to fail with exit code 1
+		exit 1
+	}
 }
 End {
-	if (-not ($Script:PSBoundParameters["DebugMode"])) {
+	if ($PSCmdLet.ParameterSetName -notlike "Debug") {
 		# Reset OSDDownloadContent.exe dependant variables for further use of the task sequence step
 		Invoke-CMResetDownloadContentVariables
 	}
+
+	# Write final output to log file
+	Write-CMLogEntry -Value "[ApplyBIOSPackage]: Completed Apply BIOS Package process" -Severity 1
 }
