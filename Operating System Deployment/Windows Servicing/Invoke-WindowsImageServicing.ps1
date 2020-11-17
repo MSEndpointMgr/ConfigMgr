@@ -136,7 +136,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2020-07-03
+    Updated:     2020-11-17
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -164,7 +164,7 @@
                          using the ShowProgress switch. Additionally, language features can now also be added using the IncludeLanguageFeatures and LanguageFeaturesMediaFile parameters.
     2.1.0 - (2020-01-27) Added new parameters to support content refresh on Distribution Points for either an Operating System Image or Operating System Upgrade Package object in ConfigMgr.
                          New parameters are RefreshPackage, PackageID and PackageType.
-    2.1.1 - (2020-07-03) Added support for TLS 1.2 when downloading modules from PSGallery
+    2.1.1 - (2020-11-17) Added support for new Windows 10 versioning changes with 2XH1/2XH2.
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -211,7 +211,7 @@ param(
     [parameter(Mandatory=$true, ParameterSetName="LanguagePack")]
     [parameter(Mandatory=$true, ParameterSetName="LanguageFeatures")]
     [ValidateNotNullOrEmpty()]
-    [ValidateSet("1703", "1709", "1803", "1809", "1903", "1909", "2004", "2009", "2103", "2109")]
+    [ValidateSet("1703", "1709", "1803", "1809", "1903", "1909", "2004", "20H2", "21H1", "21H2", "22H1", "22H2", "23H1", "23H2", "24H1", "24H2")]
     [string]$OSVersion,
 
     [parameter(Mandatory=$true, ParameterSetName="ImageServicing", HelpMessage="Specify the operating system architecture being serviced.")]
@@ -394,14 +394,10 @@ Process {
                         Write-Warning -Message $Value
                     }
                 }
+            }
 
-                # Write output to log file
-                Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
-            }
-            else {
-                # Write output to log file
-                Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
-            }
+            # Write output to log file
+            Out-File -InputObject $LogText -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
 		}
 		catch [System.Exception] {
 			Write-Warning -Message "Unable to append log entry to WindowsImageServicing.log file. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
@@ -536,7 +532,7 @@ Process {
         )
 
         # Determine correct WMI filtering for version greater than 1903, since it requires a new product type
-        if ([int]$OSVersion -ge 1903) {
+        if (($OSVersion -ge 1903) -or ([string]$OSVersion -match "H1|H2")) {
             $WMIQueryFilter = "LocalizedCategoryInstanceNames = 'Windows 10, version 1903 and later'"
         }
         else {
@@ -1549,7 +1545,7 @@ Process {
                 $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountOSImage)"" /Add-Package /PackagePath:""$($PackagePathItem)""" -ErrorAction Stop
 
                 if ($ReturnValue -ne 0) {
-                    Write-CMLogEntry -Value " - Failed to apply '$($UpdateType)' package to OS image, see DISM.log for more details. Exit code from process: $($ReturnValue)" -Severity 3
+                    Write-CMLogEntry -Value " - Failed to apply '$($UpdateType)' package to OS image, see DISM.log for more details" -Severity 3
 
                     # Throw terminating error
                     $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
@@ -2075,9 +2071,6 @@ Process {
             $PSCmdlet.ThrowTerminatingError($ErrorRecord)
         }
     }
-
-    # Enable TLS 1.2 support for downloading modules from PSGallery
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
     # PowerShell variables
     $ProgressPreference = "SilentlyContinue"
