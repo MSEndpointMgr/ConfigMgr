@@ -348,6 +348,9 @@ Begin {
     catch [System.Exception] {
         Write-Warning -Message $_.Exception.Message; break
     }
+
+    # Enable TLS 1.2 support for downloading modules from PSGallery
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 }
 Process {
     # Functions
