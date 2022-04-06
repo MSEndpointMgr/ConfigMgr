@@ -1,15 +1,30 @@
+<#PSScriptInfo
+.VERSION 2.2.0
+.GUID bae8c5cd-d70a-4cab-89dd-5068cc08a15d
+.AUTHOR NickolajA
+.DESCRIPTION Service an offline Windows image based of the ISO media source files, with the latest Cumulative Update, Service Stack Update, .NET Framework and optionally Dynamic Updates.
+.COMPANYNAME MSEndpointMgr.com
+.COPYRIGHT 
+.TAGS Windows Image Servicing
+.LICENSEURI 
+.PROJECTURI https://github.com/MSEndpointMgr/ConfigMgr/blob/master/Operating%20System%20Deployment/Windows%20Servicing/Invoke-WindowsImageServicing.ps1
+.ICONURI 
+.EXTERNALMODULEDEPENDENCIES 
+.REQUIREDSCRIPTS 
+.EXTERNALSCRIPTDEPENDENCIES 
+.RELEASENOTES
+#>
 <#
 .SYNOPSIS
-    Service a Windows image from a source files location with the latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player and optionally Dynamic Updates if specified.
+    Service an offline Windows image based of the ISO media source files, with the latest Cumulative Update, Service Stack Update, .NET Framework and optionally Dynamic Updates.
 
 .DESCRIPTION
-    This script will service Windows image from a source files location with the latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player and optionally 
+    This script will service Windows image from a source files location with the latest Cumulative Update, Service Stack Update and optionally 
     Dynamic Updates and Language Packs if specified.
     
     There are four types of updates the script handles and can automatically download:
      - Cumulative Updates
      - Service Stack Updates
-     - Adobe Flash Player updates
      - Dynamic Updates (Component Updates and Setup Updates)
 
     Additionally, the script can perform the following functions when servicing the image:
@@ -22,17 +37,17 @@
     Requirements for running this script:
     - Access to Windows ADK locally installed on the machine where script is executed
     - Access to a SMS Provider in a ConfigMgr hierarchy or stand-alone site
-    - Local paths only, UNC paths are not supported
+    - Local paths usage only, UNC paths are not supported
     - Folder containing the Windows source files extracted from an ISO media
-    - Supported operating system editions for servicing: Enterprise, Education
+    - Supported operating system editions for servicing: Enterprise, Education, Pro
     - Synchronized WSUS products: Windows 10, Windows 10 version 1903 and later, Windows 10 Dynamic Updates
     - Windows Management Framework 5.x is required when used on Windows Server 2012 R2
 
     Required folder structure should exist beneath the location specified for the OSMediaFilesRoot parameter:
-    - Source (this folder should contain the OS media source files)
+    - Source (this folder should contain the original source media files from the ISO media)
 
     An example of the complete folder structure created by the script, when E:\CMSource\OSD\OSUpgrade\W10E1809X64 has been specified for the OSMediaFilesRoot parameter:
-    <OSMediaFilesRoot>\Source (created manually, not by the script. This folder should contain the original source media files)
+    <OSMediaFilesRoot>\Source (created manually, not by the script, this folder should contain the original source media files from the ISO media)
     <OSMediaFilesRoot>\Image (this is the folder that will contains the serviced Windows image once the script has completed)
     <OSMediaFilesRoot>\Backup (will contains backups of the Image folder unless the -SkipBackup switch is passed on the command line)
     <OSMediaFilesRoot>\Mount (root folder for various sub-folders used during servicing)
@@ -112,22 +127,22 @@
     Display the dism.exe output in-console which is hidden by default.
 
 .EXAMPLE
-    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player:
+    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. .NET Framework:
     .\Invoke-WindowsImageServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64
 
-    # Service a Windows Education image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player:
+    # Service a Windows Education image from source files location with latest Cumulative Update, Service Stack Update and e.g. .NET Framework:
     .\Invoke-WindowsImageServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64 -OSEdition "Education"
 
-    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player and include .NET Framework 3.5.1:
+    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, .NET Framework and include .NET Framework 3.5.1:
     .\Invoke-WindowsImageServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64 -IncludeNetFramework
 
-    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update and e.g. Adobe Flash Player and include .NET Framework 3.5.1 and remove provisioned Appx packages:
+    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, .NET Framework and include .NET Framework 3.5.1 and remove provisioned Appx packages:
     .\Invoke-WindowsImageServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64 -IncludeNetFramework -RemoveAppxPackages
 
-    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, Adobe Flash Player and Dynamic Updates:
+    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, .NET Framework and Dynamic Updates:
     .\Invoke-WindowsImageServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64 -IncludeDynamicUpdates
 
-    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, Adobe Flash Player, Dynamic Updates and include en-GB and sv-SE language packs:
+    # Service a Windows Enterprise image from source files location with latest Cumulative Update, Service Stack Update, .NET Framework, Dynamic Updates and include en-GB and sv-SE language packs:
     # NOTE: LXPMediaFile ISO file name looks similar to the following: mu_windows_10_version_1903_local_experience_packs_lxps_for_lip_languages_released_oct_2019_x86_arm64_x64_dvd_2f05e51a.iso
     .\Invoke-WindowsImageServicing.ps1 -SiteServer CM01 -OSMediaFilesRoot "C:\CMSource\OSD\W10E1903X64" -OSVersion 1903 -OSArchitecture x64 -IncludeDynamicUpdates -IncludeLanguagePack -LPMediaFile "C:\CMSource\OSD\W10E1903X64\LP.iso" -LPRegionTag "en-GB", "sv-SE"
 
@@ -136,7 +151,7 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2018-09-12
-    Updated:     2020-11-17
+    Updated:     2022-04-05
     
     Version history:
     1.0.0 - (2018-09-12) Script created
@@ -165,6 +180,8 @@
     2.1.0 - (2020-01-27) Added new parameters to support content refresh on Distribution Points for either an Operating System Image or Operating System Upgrade Package object in ConfigMgr.
                          New parameters are RefreshPackage, PackageID and PackageType.
     2.1.1 - (2020-11-17) Added support for new Windows 10 versioning changes with 2XH1/2XH2.
+    2.1.2 - (2022-04-01) No, it's not a joke - added extended dism.exe logging for each /Add-Package operation for further troubleshooting if something goes wrong
+    2.2.0 - (2022-04-05) Added support to handle LCU+SSU combined in the same cabinet file. Removed Adobe Flash Player update file support.
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -204,7 +221,7 @@ param(
     [parameter(Mandatory=$false, ParameterSetName="LanguagePack")]
     [parameter(Mandatory=$false, ParameterSetName="LanguageFeatures")]
     [ValidateNotNullOrEmpty()]
-    [ValidateSet("Enterprise", "Education")]
+    [ValidateSet("Enterprise", "Education", "Pro")]
     [string]$OSEdition = "Enterprise",
 
     [parameter(Mandatory=$true, ParameterSetName="ImageServicing", HelpMessage="Specify the operating system version being serviced.")]
@@ -530,7 +547,7 @@ Process {
         
             [parameter(Mandatory=$true, HelpMessage="Specify the path to where the update item will be downloaded.")]
             [ValidateNotNullOrEmpty()]
-            [ValidateSet("Cumulative Update", "Servicing Stack Update", "Adobe Flash Player", ".NET Framework")]
+            [ValidateSet("Cumulative Update", ".NET Framework")]
             [string]$UpdateType
         )
 
@@ -836,6 +853,17 @@ Process {
         }
     }
 
+    function Remove-LogRootFiles {
+        # Attempt to cleanup any existing log files from previous invocations
+        $LogFiles = Get-ChildItem -Path $LogsPathRoot -Recurse -ErrorAction Stop | Where-Object { ($_.Extension -like ".log") }
+        if ($LogFiles -ne $null) {
+            foreach ($LogFile in $LogFiles) {
+                Write-CMLogEntry -Value " - Attempting to remove existing log file: $($LogFile.Name)" -Severity 1
+                Remove-Item -Path $LogFile.FullName -Force -ErrorAction Stop
+            }
+        }
+    }
+
     function Remove-UpdateContentFiles {
         # Attempt to cleanup any existing update item content files
         $UpdateItemContentFiles = Get-ChildItem -Path $UpdateFilesRoot -Recurse -ErrorAction Stop | Where-Object { ($_.Extension -like ".exe") -or ($_.Extension -like ".cab") }
@@ -844,6 +872,15 @@ Process {
                 Write-CMLogEntry -Value " - Attempting to remove existing update item content file: $($UpdateItemContentFile.Name)" -Severity 1
                 Remove-Item -Path $UpdateItemContentFile.FullName -Force -ErrorAction Stop
             }
+        }
+
+        # Attempt to cleanup Extracted sub-folder in Updates folder root
+        $UpdateExtractedItemContentFiles = Get-ChildItem -Path $UpdatesExtracted -Recurse -ErrorAction Stop
+        if ($UpdateExtractedItemContentFiles -ne $null) {
+            foreach ($UpdateExtractedItemContentFile in $UpdateExtractedItemContentFiles) {
+                Write-CMLogEntry -Value " - Attempting to remove existing extracted update item content file: $($UpdateExtractedItemContentFile.Name)" -Severity 1
+                Remove-Item -Path $UpdateExtractedItemContentFile.FullName -Force -ErrorAction Stop
+            }            
         }
 
         if ($Script:PSBoundParameters["IncludeDynamicUpdates"]) {
@@ -890,7 +927,7 @@ Process {
     }
 
     function Save-UpdateContent {
-        $UpdateItemTypeList = @("Cumulative Update", "Servicing Stack Update" , "Adobe Flash Player", ".NET Framework")
+        $UpdateItemTypeList = @("Cumulative Update", ".NET Framework")
         foreach ($UpdateItemType in $UpdateItemTypeList) {
             $Invocation = Invoke-MSUpdateItemDownload -FilePath $UpdateFilesRoot -UpdateType $UpdateItemType
             switch ($Invocation) {
@@ -906,14 +943,6 @@ Process {
                 }
                 2 {
                     switch ($UpdateItemType) {
-                        "Adobe Flash Player" {
-                            Write-CMLogEntry -Value " - Failed to locate update item content file for update type, will proceed and mark '$($UpdateItemType)' for skiplist" -Severity 2
-                            $Script:SkipAdobeFlashPlayerUpdate = $true
-                        }
-                        "Servicing Stack Update" {
-                            Write-CMLogEntry -Value " - Failed to locate update item content file for update type, will proceed and mark '$($UpdateItemType)' for skiplist" -Severity 2
-                            $Script:SkipServicingStackUpdate = $true
-                        }
                         ".NET Framework" {
                             Write-CMLogEntry -Value " - Failed to locate update item content file for update type, will proceed and mark '$($UpdateItemType)' for skiplist" -Severity 2
                             $Script:SkipNETFrameworkUpdate = $true
@@ -1218,24 +1247,24 @@ Process {
         param(
             [parameter(Mandatory=$true, HelpMessage="Type of the update files to retrieve the full path too.")]
             [ValidateNotNullOrEmpty()]
-            [ValidateSet("CumulativeUpdate", "ServicingStack", "NETFramework", "AdobeFlash")]
+            [ValidateSet("LatestCumulativeUpdate", "CumulativeUpdate", "ServicingStack", "NETFramework")]
             [string]$UpdateType
         )
         # Determine the update type filter to apply when retrieving update files
         $BreakOperation = $false
         switch ($UpdateType) {
-            "CumulativeUpdate" {
+            "LatestCumulativeUpdate" {
                 $UpdateFilter = "*CumulativeUpdate*.cab"
                 $BreakOperation = $true
             }
+            "CumulativeUpdate" {
+                $UpdateFilter = "*Windows10.0*.cab"
+            }
             "ServicingStack" {
-                $UpdateFilter = "*ServicingStackUpdate*.cab"
+                $UpdateFilter = "*SSU*.cab"
             }
             "NETFramework" {
                 $UpdateFilter = "*NETFramework*.cab"
-            }
-            "AdobeFlash" {
-                $UpdateFilter = "*AdobeFlashPlayer*.cab"
             }
         }
 
@@ -1255,7 +1284,18 @@ Process {
                 }
             }
             default {
-                $UpdateFile = Get-ChildItem -Path $UpdateFilesRoot -Recurse -Filter $UpdateFilter | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
+                switch ($UpdateType) {
+                    "LatestCumulativeUpdate" {
+                        $UpdateFilesRootPath = $UpdateFilesRoot
+                    }
+                    "CumulativeUpdate" {
+                        $UpdateFilesRootPath = Join-Path -Path $UpdateFilesRoot -ChildPath "Extracted"
+                    }
+                    "ServicingStack" {
+                        $UpdateFilesRootPath = Join-Path -Path $UpdateFilesRoot -ChildPath "Extracted"
+                    }
+                }
+                $UpdateFile = Get-ChildItem -Path $UpdateFilesRootPath -Recurse -Filter $UpdateFilter | Sort-Object -Descending -Property $_.CreationTime | Select-Object -First 1 -ExpandProperty FullName
                 if ($UpdateFile -ne $null) {
                     Write-CMLogEntry -Value " - Selected the '$($UpdateType)' content cabinet file: $($UpdateFile)" -Severity 1
                     return $UpdateFile
@@ -1529,7 +1569,7 @@ Process {
         param(
             [parameter(Mandatory=$true, HelpMessage="Specify the update type that will be injected into OS image.")]
             [ValidateNotNullOrEmpty()]
-            [ValidateSet("Cumulative Update", "Servicing Stack Update", ".NET Framework", "Adobe Flash", "Dynamic Update Component Update")]
+            [ValidateSet("Cumulative Update", "Servicing Stack Update", ".NET Framework", "Dynamic Update Component Update")]
             [string]$UpdateType,
 
             [parameter(Mandatory=$true, HelpMessage="Specify the full path of the package that will be injected into OS image.")]
@@ -1545,7 +1585,7 @@ Process {
             foreach ($PackagePathItem in $PackagePath) {
                 Write-CMLogEntry -Value " - Currently processing package: $($PackagePathItem)" -Severity 1
                 $PackagePathItemCount++
-                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountOSImage)"" /Add-Package /PackagePath:""$($PackagePathItem)""" -ErrorAction Stop
+                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountOSImage)"" /Add-Package /PackagePath:""$($PackagePathItem)"" /LogPath:$($LogsPathRoot)\Add-OSImagePackage.log" -ErrorAction Stop
 
                 if ($ReturnValue -ne 0) {
                     Write-CMLogEntry -Value " - Failed to apply '$($UpdateType)' package to OS image, see DISM.log for more details" -Severity 3
@@ -1590,7 +1630,7 @@ Process {
             foreach ($PackagePathItem in $PackagePath) {
                 Write-CMLogEntry -Value " - Currently processing package: $($PackagePathItem)" -Severity 1
                 $PackagePathItemCount++
-                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountWinRE)"" /Add-Package /PackagePath:""$($PackagePathItem)""" -ErrorAction Stop
+                $ReturnValue = Invoke-Executable -FilePath $DeploymentToolsDISMPath -Arguments "/Image:""$($MountWinRE)"" /Add-Package /PackagePath:""$($PackagePathItem)"" /LogPath:$($LogsPathRoot)\Add-WinREImagePackage.log" -ErrorAction Stop
 
                 if ($ReturnValue -ne 0) {
                     Write-CMLogEntry -Value " - Failed to apply '$($UpdateType)' package to WinRE image, see DISM.log for more details" -Severity 3
@@ -1899,6 +1939,7 @@ Process {
             # Mount the WinRE temporary image
             Write-CMLogEntry -Value " - Attempting to mount temporary winre_temp.wim file from: $($OSImageWinRETempWim)" -Severity 1
             Mount-WindowsImage -ImagePath $OSImageWinRETempWim -Path $MountWinRE -Index 1 -ErrorAction Stop | Out-Null
+            Write-CMLogEntry -Value " - Successfully mounted temporary '$($OSImageWinRETempWim)' to: $($MountWinRE)" -Severity 1
         }
         catch [System.Exception] {
             Write-CMLogEntry -Value " - Failed to mount temporary WinRE image from servicing location. Error message: $($_.Exception.Message)" -Severity 3
@@ -2075,13 +2116,31 @@ Process {
         }
     }
 
+    # Extract Cumulative Update and Service Stack Update files from downloaded Cumulative Update cabinet file
+    function Expand-CumulativeUpdateCabinet {
+        [CmdletBinding(SupportsShouldProcess=$true)]
+        param(
+            [parameter(Mandatory = $true, HelpMessage = "Specify the path for the cabinet file to be extracted.")]
+            [ValidateNotNullOrEmpty()]
+            [string]$FilePath
+        )
+        Write-CMLogEntry -Value " - Attempting to expand Cumulative Update cabinet file: $($FilePath)" -Severity 1
+        Write-CMLogEntry -Value " - Expand directory: $($UpdateFilesRoot)\Extracted" -Severity 1
+        $ReturnValue = Invoke-Executable -FilePath "expand.exe" -Arguments "$($FilePath) -F:* $($UpdatesExtracted)"
+        if ($ReturnValue -ne 0) {
+            Write-CMLogEntry -Value " - Failed to expand Cumulative Update cabinet file" -Severity 3
+
+            # Throw terminating error
+            $ErrorRecord = New-TerminatingErrorRecord -Message ([string]::Empty)
+            $PSCmdlet.ThrowTerminatingError($ErrorRecord)
+        }
+    }
+
     # PowerShell variables
     $ProgressPreference = "SilentlyContinue"
 
     # Define default values for skip variables and other functionality
-    $SkipServicingStackUpdate = $false
     $SkipNETFrameworkUpdate = $false
-    $SkipAdobeFlashPlayerUpdate = $false
     $SkipDUCUPatch = $false
     $SkipDUSUPatch = $false
     $SkipLanguagePack = $false
@@ -2094,13 +2153,17 @@ Process {
 
     # White list of Appx packages to keep in the serviced image
     $WhiteListedApps = @(
+        "Microsoft.CompanyPortal",    
         "Microsoft.DesktopAppInstaller",
+        "Microsoft.MicrosoftEdge.Stable",
         "Microsoft.Messaging", 
         "Microsoft.MSPaint",
         "Microsoft.Windows.Photos",
         "Microsoft.StorePurchaseApp",
         "Microsoft.MicrosoftOfficeHub",
         "Microsoft.MicrosoftStickyNotes",
+        "Microsoft.Outlook.DesktopIntegrationServicess",
+        "Microsoft.Windows.ShellExperienceHost",
         "Microsoft.WindowsAlarms",
         "Microsoft.WindowsCalculator", 
         "Microsoft.WindowsCommunicationsApps", # Mail, Calendar etc
@@ -2108,6 +2171,7 @@ Process {
         "Microsoft.WindowsStore",
         "Microsoft.ScreenSketch",
         "Microsoft.HEIFImageExtension",
+        "Microsoft.VCLibs.140.00",
         "Microsoft.VP9VideoExtensions",
         "Microsoft.WebMediaExtensions",
         "Microsoft.WebpImageExtension"
@@ -2120,6 +2184,7 @@ Process {
     $UpdateFilesRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "Updates"
     $LPFilesRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "LanguagePack"
     $BackupPathRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "Backup"
+    $LogsPathRoot = Join-Path -Path $OSMediaFilesRoot -ChildPath "Logs"
     $OSInstallWim = Join-Path -Path $OSMediaImagePath -ChildPath "sources\install.wim"
     $OSBootWim = Join-Path -Path $OSMediaImagePath -ChildPath "sources\boot.wim"
     $OSImageTempWim = Join-Path -Path (Join-Path -Path $MountPathRoot -ChildPath "Temp") -ChildPath "install_temp.wim"
@@ -2225,7 +2290,7 @@ Process {
         }
 
         # Construct root level folders for temporary content and backups
-        $RootFoldersList = @("Source", "Image", "Updates", "Mount", "Backup")
+        $RootFoldersList = @("Source", "Image", "Updates", "Mount", "Backup", "Logs")
         foreach ($RootFolder in $RootFoldersList) {
             New-RootFolderRequired -Name $RootFolder
         }
@@ -2233,6 +2298,7 @@ Process {
         # Construct sublevel folders per root folder
         $SubRootTable = @{
             "Mount" = @("OSImage", "BootImage", "WinRE", "Temp")
+            "Updates" = @("Extracted")
         }
         foreach ($SubRootKey in $SubRootTable.Keys) {
             foreach ($SubRootValue in $SubRootTable[$SubRootKey]) {
@@ -2270,6 +2336,9 @@ Process {
             New-SubFolderOptional -Path $LPFeatureFilesRoot -Name "Features"
         }
 
+        # Perform cleanup of any existing log files from previous invocations
+        Remove-LogRootFiles
+
         Write-CMLogEntry -Value "[Environment]: Successfully completed phase" -Severity 1
         Write-CMLogEntry -Value "[Content]: Initiating content requirements phase" -Severity 1
 
@@ -2279,7 +2348,7 @@ Process {
         # Verify that given location for OSMediaFilesRoot contains install.wim and boot.wim, if required files are not present, script execution will break
         Test-SourceFiles
 
-        # Download Cumulative Update, Servicing Stack Update, .NET Framework and Adobe Flash Player updates
+        # Download Cumulative Update, .NET Framework
         Save-UpdateContent
 
         if ($PSBoundParameters["IncludeLanguagePack"]) {
@@ -2310,10 +2379,11 @@ Process {
         }
 
         # Validate updates root folder contains required update content cabinet files, if required update files are not present, script execution will break
+        $LatestCumulativeUpdateFilePath = Get-UpdateFiles -UpdateType "LatestCumulativeUpdate"
+        Expand-CumulativeUpdateCabinet -FilePath $LatestCumulativeUpdateFilePath
         $CumulativeUpdateFilePath = Get-UpdateFiles -UpdateType "CumulativeUpdate"
         $ServiceStackUpdateFilePath = Get-UpdateFiles -UpdateType "ServicingStack"
         $NETFrameworkUpdateFilePaths = Get-UpdateFiles -UpdateType "NETFramework"
-        $AdobeUpdateFilePath = Get-UpdateFiles -UpdateType "AdobeFlash"
 
         if ($PSBoundParameters["UpdateOneDriveSetup"]) {
             # Download the latest OneDriveSetup.exe file from Microsoft download page
@@ -2352,13 +2422,8 @@ Process {
         # Mount the temporary OS image and prepare for offline servicing
         Mount-OSImage
 
-        if ($SkipServicingStackUpdate -eq $false) {
-            # Add Servicing Stack Update package to mounted temporary OS image
-            Add-OSImagePackage -UpdateType "Servicing Stack Update" -PackagePath $ServiceStackUpdateFilePath
-        }
-        else {
-            Write-CMLogEntry -Value " - Update type 'Servicing Stack Update' was previously set to be skipped, will not attempt to apply package to OS image as no update package file was found" -Severity 2
-        }
+        # Add Servicing Stack Update package to mounted temporary OS image
+        Add-OSImagePackage -UpdateType "Servicing Stack Update" -PackagePath $ServiceStackUpdateFilePath
 
         if ($PSBoundParameters["IncludeLanguagePack"]) {
             # Add Language Pack base packages and if also specified Local Experience Packs to temporary OS image
@@ -2372,14 +2437,6 @@ Process {
 
         # Add Cumulative Update package to mounted temporary OS image
         Add-OSImagePackage -UpdateType "Cumulative Update" -PackagePath $CumulativeUpdateFilePath
-
-        if ($SkipAdobeFlashPlayerUpdate -eq $false) {
-            # Add Adobe Flash Update package to mounted temporary OS image
-            Add-OSImagePackage -UpdateType "Adobe Flash" -PackagePath $AdobeUpdateFilePath
-        }
-        else {
-            Write-CMLogEntry -Value " - Update type 'Adobe Flash Update' was previously set to be skipped, will not attempt to apply package to OS image as no update package file was found" -Severity 2
-        }
 
         if ($PSBoundParameters["IncludeDynamicUpdates"]) {
             if ($SkipDUCUPatch -eq $false) {
@@ -2460,7 +2517,12 @@ Process {
         Mount-BootImage
 
         # Add Servicing Stack Update package to mounted temporary boot image
-        Add-BootImagePackage -UpdateType "Servicing Stack Update" -PackagePath $ServiceStackUpdateFilePath
+        if ($SkipServicingStackUpdate -eq $false) {
+            Add-BootImagePackage -UpdateType "Servicing Stack Update" -PackagePath $ServiceStackUpdateFilePath
+        }
+        else {
+            Write-CMLogEntry -Value " - Update type 'Servicing Stack Update' was previously set to be skipped, will not attempt to apply package to boot image as no update package file was found" -Severity 2
+        }
 
         # Add Cumulative Update package to mounted temporary boot image
         Add-BootImagePackage -UpdateType "Cumulative Update" -PackagePath $CumulativeUpdateFilePath
@@ -2495,6 +2557,7 @@ Process {
         Write-CMLogEntry -Value "[ServicingComplete]: Windows image servicing completed successfully" -Severity 1
     }
     catch [System.Exception] {
+        Write-CMLogEntry -Value "$($Error[0].Exception.Message)" -Severity 3
         Write-CMLogEntry -Value "[ServicingFailed]: Windows image servicing failed, please refer to previous error or warning messages" -Severity 3
     }
 }
