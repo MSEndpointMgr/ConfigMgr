@@ -118,7 +118,7 @@ Process {
 
     if (($PSBoundParameters["Recurse"]) -and (-not($PSBoundParameters["ApplicationName"])) -and ($ApplicationName.Length -eq 0)) {
         $ApplicationName = New-Object -TypeName System.Collections.ArrayList
-        $GetApplications = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_Application" -Filter "IsLatest = '$True'" -ComputerName $SiteServer ## Baard
+        $GetApplications = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_Application" -Filter "IsLatest = '$True'" -ComputerName $SiteServer
         $GetApplications | ForEach-Object {
             $ApplicationName.Add($_) | Out-Null
         }
@@ -128,10 +128,7 @@ Process {
         Write-Warning "You cannot specify the 'ApplicationName' and 'Recurse' parameters at the same time"
     }
     if ((-not($PSBoundParameters["Recurse"])) -and ($PSBoundParameters["ApplicationName"]) -and ($ApplicationName.Length -ge 1)) {
-        $GetApplicationName = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_ApplicationLatest" -Filter "LocalizedDisplayName like '%$($ApplicationName)%'" -ComputerName $SiteServer ## Baard
+        $GetApplicationName = Get-WmiObject -Namespace "root\SMS\site_$($SiteCode)" -Class "SMS_ApplicationLatest" -Filter "LocalizedDisplayName like '%$($ApplicationName)%'" -ComputerName $SiteServer
         Rename-ApplicationSource -AppName $GetApplicationName -Verbose
     }
 }
-
-# & .\Update-CMApplicationSource.ps1 -SiteServer Oslmgt09 -Locate oslmgt02 -Replace Oslmgt09 -ApplicationName "AlternaTIFF x86" -Copy -Verbose
-# & .\Update-CMApplicationSource.ps1 -SiteServer Oslmgt09 -Locate oslmgt02 -Replace Oslmgt09 -Copy -Recurse -Verbose
