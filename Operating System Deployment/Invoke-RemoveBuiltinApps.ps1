@@ -17,21 +17,24 @@
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     Created:     2019-03-10
-    Updated:     2019-08-13
+    Updated:     2021-02-02
 
     Version history:
     1.0.0 - (2019-03-10) Initial script updated with help section and a fix for randomly freezing
     1.1.0 - (2019-05-03) Added support for Windows 10 version 1903 (19H1)
     1.1.1 - (2019-08-13) Removed the part where it was disabling/enabling configuration for Store updates, as it's not needed
+    1.1.2 - (2019-10-03) Removed unnecessary left over functions and updated catch statements so that they actually log the current app that could not be removed
+    1.2.0 - (2021-02-02) Added support for Windows 10 version 2004 (20H1) and 20H2
 #>
 Begin {
     # White list of Features On Demand V2 packages
-    $WhiteListOnDemand = "NetFX3|Tools.Graphics.DirectX|Tools.DeveloperMode.Core|Language|Browser.InternetExplorer|ContactSupport|OneCoreUAP|Media.WindowsMediaPlayer|Hello.Face"
+    $WhiteListOnDemand = "NetFX3|DirectX|Tools.DeveloperMode.Core|Language|InternetExplorer|ContactSupport|OneCoreUAP|WindowsMediaPlayer|Hello.Face|Notepad|MSPaint|PowerShell.ISE|ShellComponents"
 
     # White list of appx packages to keep installed
     $WhiteListedApps = New-Object -TypeName System.Collections.ArrayList
     $WhiteListedApps.AddRange(@(
         "Microsoft.DesktopAppInstaller",
+        "Microsoft.Office.OneNote",
         "Microsoft.Messaging", 
         "Microsoft.MSPaint",
         "Microsoft.Windows.Photos",
@@ -56,6 +59,21 @@ Begin {
 
     # Windows 10 version 1903
     # No new apps
+
+    # Windows 10 version 1909
+    $WhiteListedApps.AddRange(@(
+        "Microsoft.Outlook.DesktopIntegrationServicess"
+    ))
+
+    # Windows 10 version 2004
+    $WhiteListedApps.AddRange(@(
+        "Microsoft.VCLibs.140.00"
+    ))
+
+    # Windows 10 version 20H2
+    $WhiteListedApps.AddRange(@(
+        "Microsoft.MicrosoftEdge.Stable"
+    ))
 }
 Process {
     # Functions
@@ -77,68 +95,7 @@ Process {
             Out-File -InputObject $Value -Append -NoClobber -Encoding Default -FilePath $LogFilePath -ErrorAction Stop
         }
         catch [System.Exception] {
-            Write-Warning -Message "Unable to append log entry to RemovedApps.log file"
-        }
-    }
-
-    function Test-RegistryValue {
-        param(
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Path,
-    
-            [parameter(Mandatory=$false)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name
-        )
-        # If item property value exists return True, else catch the failure and return False
-        try {
-            if ($PSBoundParameters["Name"]) {
-                $Existence = Get-ItemProperty -Path $Path | Select-Object -ExpandProperty $Name -ErrorAction Stop
-            }
-            else {
-                $Existence = Get-ItemProperty -Path $Path -ErrorAction Stop
-            }
-            
-            if ($Existence -ne $null) {
-                return $true
-            }
-        }
-        catch [System.Exception] {
-            return $false
-        }
-    }    
-
-    function Set-RegistryValue {
-        param(
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Path,
-
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Name,
-
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [string]$Value,
-
-            [parameter(Mandatory=$true)]
-            [ValidateNotNullOrEmpty()]
-            [ValidateSet("DWORD", "String")]
-            [string]$Type
-        )
-        try {
-            $RegistryValue = Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue
-            if ($RegistryValue -ne $null) {
-                Set-ItemProperty -Path $Path -Name $Name -Value $Value -Force -ErrorAction Stop
-            }
-            else {
-                New-ItemProperty -Path $Path -Name $Name -PropertyType $Type -Value $Value -Force -ErrorAction Stop | Out-Null
-            }
-        }
-        catch [System.Exception] {
-            Write-Warning -Message "Failed to create or update registry value '$($Name)' in '$($Path)'. Error message: $($_.Exception.Message)"
+            Write-Warning -Message "Unable to append log entry to $($FileName) file"
         }
     }
 
@@ -172,7 +129,7 @@ Process {
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxPackage: $($AppPackageFullName)"
+                Write-LogEntry -Value "Unable to locate AppxPackage for current app: $($App)"
             }
 
             # Attempt to remove AppxProvisioningPackage
@@ -186,7 +143,7 @@ Process {
                 }
             }
             else {
-                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage: $($AppProvisioningPackageName)"
+                Write-LogEntry -Value "Unable to locate AppxProvisioningPackage for current app: $($App)"
             }
         }
     }
@@ -199,10 +156,10 @@ Process {
 
         # Handle cmdlet limitations for older OS builds
         if ($OSBuildNumber -le "16299") {
-            $OnDemandFeatures = Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
+            $OnDemandFeatures = Get-WindowsCapability -Online -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed" } | Select-Object -ExpandProperty Name
         }
         else {
-            $OnDemandFeatures = Get-WindowsCapability -Online -LimitAccess -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed"} | Select-Object -ExpandProperty Name
+            $OnDemandFeatures = Get-WindowsCapability -Online -LimitAccess -ErrorAction Stop | Where-Object { $_.Name -notmatch $WhiteListOnDemand -and $_.State -like "Installed" } | Select-Object -ExpandProperty Name
         }
 
         foreach ($Feature in $OnDemandFeatures) {

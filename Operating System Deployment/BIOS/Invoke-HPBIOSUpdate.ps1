@@ -3,16 +3,13 @@
     Invoke HP BIOS Update process.
 
 .DESCRIPTION
-    This script will invoke the HP BIOS update process for the executable residing in the path specified for the Path parameter.
+    This script will invoke the HP BIOS update process using automatic detection of the flash utility with the update file specified for the Path parameter.
 
 .PARAMETER Path
-    Specify the path containing the HPBIOSUPDREC executable and bios update *.bin -file.
+    Specify the %OSDBIOSPackage01% TS environment variable populated by the Invoke-CMDownloadBIOSPackage.ps1 script.
 
 .PARAMETER PasswordBin
-    Specify the BIOS password file if necessary (save the password file to the same directory as the script).
-
-.PARAMETER LogFileName
-    Set the name of the log file produced by the flash utility.
+    Specify the BIOS password file if necessary (save the password file to the same directory as this script).
 
 .EXAMPLE
     .\Invoke-HPBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -PasswordBin "Password.bin"
@@ -22,7 +19,7 @@
     Author:      Lauri Kurvinen / Nickolaj Andersen
     Contact:     @estmi / @NickolajA
     Created:     2017-09-05
-    Updated:     2019-05-14
+    Updated:     2020-04-23
 
     Version history:
 	1.0.0 - (2017-09-05) Script created
@@ -31,6 +28,9 @@
 	1.0.3 - (2019-04-30) Updated to support HPQFlash.exe and HPQFlash64.exe
 	1.0.4 - (2019-05-14) Handle $PasswordBin to check if empty string or null instead of just null value
 	1.0.5 - (2019-05-14) Fixed an issue where the flash utility would look in the script executing location instead of the passed $Path location for the update file
+	1.0.6 - (2020-02-06) Previous "fix" in 1.0.5 was a mistake, this version corrects it
+	1.0.7 - (2020-04-23) Added additional logging output when flash utility is being executed including exit code. Removed the LogFileName parameter as the 
+			   	         exit code from the flash utility is now embedded in the Invoke-HPBIOSUpdate.log file.
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
@@ -41,11 +41,7 @@ param(
 
 	[parameter(Mandatory = $false, HelpMessage = "Specify the BIOS password filename if necessary (save the password file to the same directory as the script).")]
 	[ValidateNotNullOrEmpty()]
-	[string]$PasswordBin,
-
-	[parameter(Mandatory = $false, HelpMessage = "Set the name of the log file produced by the flash utility.")]
-	[ValidateNotNullOrEmpty()]
-	[string]$LogFileName = "HPFlashBIOSUpdate.log"	
+	[string]$PasswordBin
 )
 Begin {	
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -100,7 +96,7 @@ Process {
 	
 	# Change working directory to path containing BIOS files	
 	Set-Location -Path $Path	
-	Write-CMLogEntry -Value "Work directory set as $($Path)" -Severity 1
+	Write-CMLogEntry -Value "Working directory set as $($Path)" -Severity 1
 
 	# Write log file for script execution	
 	Write-CMLogEntry -Value "Initiating script to determine flashing capabilities for HP BIOS updates" -Severity 1
@@ -159,25 +155,23 @@ Process {
 	
 	if (-not([System.String]::IsNullOrEmpty($PasswordBin))) {
 		# Add password to the flash bios switches
-		$FlashSwitches = $FlashSwitches + " -p$($Path)\$($PasswordBin)"	
+		$FlashSwitches = $FlashSwitches + " -p$($PSScriptRoot)\$($PasswordBin)"	
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
 	else {
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
-
-	# Set log file location
-	$LogFilePath = Join-Path -Path $TSEnvironment.Value("_SMSTSLogPath") -ChildPath $LogFileName
 	
 	# Determine if we're running in WinPE or Full OS
 	if (($TSEnvironment -ne $null) -and ($TSEnvironment.Value("_SMSTSinWinPE") -eq $true)) {
 		try {		
 			# Start flash update process
-			$FlashProcess = Start-Process -FilePath $FlashUtility -ArgumentList $FlashSwitches -Passthru -Wait
+			Write-CMLogEntry -Value "Running Flash Update: $($FlashUtility)$($FlashSwitches)" -Severity 1
+			$FlashProcess = Start-Process -FilePath $FlashUtility -ArgumentList $FlashSwitches -Passthru -Wait -ErrorAction Stop
 
-			# Output Exit Code for testing purposes
-			$FlashProcess.ExitCode | Out-File -FilePath $LogFilePath	
-		}	
+			# Output Exit Code
+			Write-CMLogEntry -Value "Flash utility exit code: $($FlashProcess.ExitCode)" -Severity 1
+		}
 		catch [System.Exception] {
 			Write-CMLogEntry -Value "An error occured while updating the system BIOS in WinPE phase. Error message: $($_.Exception.Message)" -Severity 3; exit 1	
 		}
@@ -203,10 +197,11 @@ Process {
 		
 		# Start Bios update process
 		try {			
-			Write-CMLogEntry -Value "Running Flash Update - $($FlashUtility)" -Severity 1			
+			Write-CMLogEntry -Value "Running Flash Update: $($FlashUtility)$($FlashSwitches)" -Severity 1
 			$FlashProcess = Start-Process -FilePath $FlashUtility -ArgumentList $FlashSwitches -Passthru -Wait			
-			# Output Exit Code for testing purposes			
-			$FlashProcess.ExitCode | Out-File -FilePath $LogFilePath
+			
+			# Output Exit Code
+			Write-CMLogEntry -Value "Flash utility exit code: $($FlashProcess.ExitCode)" -Severity 1
 		}
 		catch [System.Exception] {
 			Write-Warning -Message "An error occured while updating the system BIOS in Full OS phase. Error message: $($_.Exception.Message)"; exit 1
