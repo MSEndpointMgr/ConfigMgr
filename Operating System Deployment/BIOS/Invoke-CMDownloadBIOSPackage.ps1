@@ -18,17 +18,15 @@
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
 	
 .EXAMPLE
-    Production BIOS Packages:
+    # Production BIOS Packages
 	# Detect, download and apply an available BIOS update during OS deployment with ConfigMgr (Default):
 	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS"
-
-	# Detect, download and apply an available BIOS update during OS upgrade with ConfigMgr:
-    .\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType OSUpgrade
-    
+   
 	# Detect, download and apply an available BIOS update during OS upgrade for an existing operating system using ConfigMgr:
 	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS" -DeploymentType BIOSUpdate    
 
-	Piloting BIOS Packages (Using V5.0.0 of the BIOS  Automation Tool onwards):
+	# Piloting BIOS Packages (Using version 5.0.0 of the Driver Automation Tool and onwards)
+	# Detect, download and apply an available BIOS update during OS deployment with ConfigMgr (Default):
 	.\Invoke-CMDownloadBIOSPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "BIOS Update Pilot"
 	
 .NOTES
@@ -36,7 +34,7 @@
     Author:      Nickolaj Andersen & Maurice Daly
     Contact:     @NickolajA / @modaly_it
     Created:     2017-05-22
-    Updated:     2019-07-22
+    Updated:     2019-11-25
     
     Version history:
     1.0.0 - (2017-05-22) Script created 
@@ -60,6 +58,8 @@
 	2.1.0 - (2019-05-07) Updated the script to support BIOS versioning in the 'XX.XX.XX X X' format
 	2.1.1 - (2019-05-14) Updated the script to correctly handling computer models that contains '-' in the model name
 	2.1.2 - (2019-07-22) Updated to support Microsoft Surface devices
+	2.1.3 - (2019-11-25) Removed the OSUpgrade deployment type as it was not used within this script
+	2.1.4 - (2019-12-02) Updated Microsoft Surface logic as firmware will be contained within the driver package for new packages with DAT 6.4.0 
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param (
@@ -71,8 +71,8 @@ param (
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
 
-	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade or BIOSUpdate.")]
-	[ValidateSet("BareMetal", "OSUpgrade", "BIOSUpdate")]
+	[parameter(Mandatory = $false, HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default) or BIOSUpdate.")]
+	[ValidateSet("BareMetal", "BIOSUpdate")]
 	[string]$DeploymentType = "BareMetal",
 
 	[parameter(Mandatory = $false, HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
@@ -84,7 +84,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.1.0"
+	$ScriptVersion = "2.1.4"
 
 	if (-not ($PSBoundParameters["DebugMode"])) {
 		# Load Microsoft.SMS.TSEnvironment COM object
@@ -92,9 +92,6 @@ Begin {
 			$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
 			# Set Log Path
 			switch ($DeploymentType) {
-				"OSUpgrade" {
-					$LogsDirectory = Join-Path -Path $env:SystemRoot -ChildPath "Temp"
-				}
 				"BIOSUpdate" {
 					$LogsDirectory = Join-Path -Path $env:SystemRoot -ChildPath "Temp"
 				}
@@ -408,7 +405,7 @@ Process {
 		"*Microsoft*" {
 			$ComputerManufacturer = "Microsoft"
 			$ComputerModel = (Get-WmiObject -Class Win32_ComputerSystem | Select-Object -ExpandProperty Model).Trim()
-			#$ComputerModel = (Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU).Replace("_", " ")
+			$SystemSKU = Get-WmiObject -Namespace root\wmi -Class MS_SystemInformation | Select-Object -ExpandProperty SystemSKU
 		}
 		"*HP*" {
 			$ComputerManufacturer = "Hewlett-Packard"
@@ -451,6 +448,10 @@ Process {
 	
 	# Call web service for a list of packages
 	try {
+		if ($ComputerManufacturer -match "Microsoft"){
+		$Filter = ($Filter.ToLower()).Replace("bios","drivers")
+		Write-CMLogEntry -Value "Replacing BIOS filter to Drivers for Microsoft models. The same package is used for both" -Severity 1
+		}
 		$Packages = $WebService.GetCMPackage($SecretKey, "$($Filter)")
 		Write-CMLogEntry -Value "Retrieved a total of $(($Packages | Measure-Object).Count) BIOS packages from web service" -Severity 1
 	}
