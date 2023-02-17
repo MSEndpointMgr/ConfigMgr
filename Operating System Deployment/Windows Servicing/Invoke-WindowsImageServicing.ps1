@@ -1,5 +1,5 @@
 <#PSScriptInfo
-.VERSION 2.2.0
+.VERSION 2.2.1
 .GUID bae8c5cd-d70a-4cab-89dd-5068cc08a15d
 .AUTHOR NickolajA
 .DESCRIPTION Service an offline Windows image based of the ISO media source files, with the latest Cumulative Update, Service Stack Update, .NET Framework and optionally Dynamic Updates.
