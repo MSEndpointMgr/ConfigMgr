@@ -11,6 +11,9 @@
 .PARAMETER PasswordBin
     Specify the BIOS password file if necessary (save the password file to the same directory as this script).
 
+.PARAMETER PasswordBinPath
+	Specify the BIOS password file location (if not located in same directory as this script).
+	
 .EXAMPLE
     .\Invoke-HPBIOSUpdate.ps1 -Path %OSDBIOSPackage01% -PasswordBin "Password.bin"
 
@@ -41,7 +44,20 @@ param(
 
 	[parameter(Mandatory = $false, HelpMessage = "Specify the BIOS password filename if necessary (save the password file to the same directory as the script).")]
 	[ValidateNotNullOrEmpty()]
-	[string]$PasswordBin
+	[string]$PasswordBin,
+
+	[parameter(Mandatory = $false, HelpMessage = "Specify the BIOS password file location (if different from this script's location).")]
+	[ValidateNotNullOrEmpty()]
+	[ValidateScript({
+		if (!($_ | Test-Path)){
+            throw "The PasswordBinPath folder path does not exist"
+        }
+        if (!($_ | Test-Path -PathType Container)){
+            throw "The PasswordBinPath argument must be a folder path"
+        }
+        return $true
+	})]
+	[System.IO.DirectoryInfo]$PasswordBinPath = $PSScriptRoot
 )
 Begin {	
 	# Load Microsoft.SMS.TSEnvironment COM object
@@ -155,7 +171,7 @@ Process {
 	
 	if (-not([System.String]::IsNullOrEmpty($PasswordBin))) {
 		# Add password to the flash bios switches
-		$FlashSwitches = $FlashSwitches + " -p$($PSScriptRoot)\$($PasswordBin)"	
+		$FlashSwitches = $FlashSwitches + " -p`"$($PasswordBinPath)\$($PasswordBin)`""	
 		Write-CMLogEntry -Value "Using the following switches for BIOS file: $($FlashSwitches)" -Severity 1
 	}
 	else {
@@ -192,7 +208,7 @@ Process {
 		# Supend Bitlocker if $OSVolumeEncypted is $true
 		if ($OSDriveEncrypted -eq $true) {
 			Write-CMLogEntry -Value "Suspending BitLocker protected volume: $($env:SystemDrive)" -Severity 1
-			Manage-Bde -Protectors -Disable C:
+			Manage-Bde -Protectors -Disable $($env:SystemDrive)
 		}		
 		
 		# Start Bios update process
