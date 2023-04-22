@@ -234,6 +234,19 @@ Begin {
 	if ($PSCmdLet.ParameterSetName -like "Execute") {
 		try {
 			$TSEnvironment = New-Object -ComObject Microsoft.SMS.TSEnvironment -ErrorAction Continue
+			$TsProgressUI = New-Object -ComObject Microsoft.SMS.TsProgressUI -ErrorAction Continue
+			If ([string]::IsNullOrEmpty($TSEnvironment.Value("TSProgressInfoLevel"))) {
+				$script:TSProgressInfoLevel = $null
+			}
+			else {
+				[int]$script:TSProgressInfoLevel = [int]$TSEnvironment.Value("TSProgressInfoLevel")
+			}
+			$script:pszOrgName = $TSEnvironment.Value("_SMSTSOrgName")
+			$script:pszTaskSequenceName = $TSEnvironment.Value("_SMSTSPackageName")
+			$script:pszCustomTitle = $TSEnvironment.Value("_SMSTSCustomProgressDialogMessage")
+			$script:pszCurrentAction = $TSEnvironment.Value("_SMSTSCurrentActionName")
+			[int]$script:uStep_0 = [int]$TSEnvironment.Value("_SMSTSNextInstructionPointer")
+			[int]$script:uMaxStep_0 = [int]$TSEnvironment.Value("_SMSTSInstructionTableSize")
 		}
 		catch [System.Exception] {
 			Write-Warning -Message "Unable to construct Microsoft.SMS.TSEnvironment object"
@@ -308,6 +321,30 @@ Process {
 		}
 	}
 
+	function Invoke-ShowActionProgress {
+		param(
+			[parameter(Mandatory = $true, HelpMessage = "Action text to show.")]
+			[ValidateNotNullOrEmpty()]
+			[string]$sActionText,
+			[parameter(Mandatory = $true, HelpMessage = "Step number.")]
+			[ValidateNotNullOrEmpty()]
+			[int]$uStep,
+			[parameter(Mandatory = $true, HelpMessage = "Max steps.")]
+			[ValidateNotNullOrEmpty()]
+			[int]$uMaxStep
+		)
+		try {
+			if ($null -eq $TSProgressInfoLevel) {
+				$TsProgressUI.ShowActionProgress($pszOrgName, $pszTaskSequenceName, $pszCustomTitle, $pszCurrentAction, $uStep_0, $uMaxStep_0, $sActionText, $uStep, $uMaxStep)
+			}
+			else {
+				$TsProgressUI.ShowActionDetailedProgress($pszOrgName, $pszTaskSequenceName, $pszCustomTitle, $pszCurrentAction, $uStep_0, $uMaxStep_0, $sActionText, $uStep, $uMaxStep, $TSProgressInfoLevel)
+			}
+			
+		}
+		catch { }
+	}
+
 	function Invoke-Executable {
 		param (
 			[parameter(Mandatory = $true, HelpMessage = "Specify the file name or path of the executable to be invoked, including the extension")]
@@ -344,7 +381,52 @@ Process {
 		
 		return $Invocation.ExitCode
 	}
+	function Invoke-DISM {
+		param(
+			[parameter(Mandatory = $false, HelpMessage = "Specify arguments that will be passed to the executable")]
+			[ValidateNotNull()]
+			[string]$Arguments
+		)
+		$scriptblock = {
+			param($cmd_args)
 	
+			$process = New-Object system.Diagnostics.Process
+	
+			$si = New-Object System.Diagnostics.ProcessStartInfo
+			$si.FileName = "dism.exe"
+			$si.Arguments = $cmd_args
+			$si.UseShellExecute = $false
+			$si.RedirectStandardOutput = $true
+	
+			$process.StartInfo = $si
+			$process.Start() | Out-Null
+			
+			do {
+				# Keep redirecting output until process exits
+				$line = $process.StandardOutput.ReadLine()
+				If ($line -match "^Installing*") {
+					[int]$uStep = [int]((($line -split "-")[0] -split "Installing ")[1] -split " of ")[0]
+					[int]$uMaxStep = [int]((($line -split "-")[0] -split "Installing ")[1] -split " of ")[1]
+					$sActionText = "Installing driver $uStep of $uMaxStep"
+					Invoke-ShowActionProgress -sActionText "Installing drivers ($uStep of $uMaxStep)" -uStep $uStep -uMaxStep $uMaxStep
+				}
+			} until ($EndOfStream = $process.StandardOutput.EndOfStream)
+	
+			$process.WaitForExit() | out-null
+	
+			return $process.ExitCode
+		}
+	
+		try {
+			$ReturnExitCode = Invoke-Command -ScriptBlock $scriptblock -ArgumentList $Arguments
+		}
+		catch [System.Exception] {
+			Write-Warning -Message $_.Exception.Message; break
+		}
+			
+		return $ReturnExitCode
+	}
+
 	function Invoke-CMDownloadContent {
 		param (
 			[parameter(Mandatory = $true, ParameterSetName = "NoPath", HelpMessage = "Specify a PackageID that will be downloaded.")]
@@ -1643,7 +1725,10 @@ Process {
 							# Get driver full path and install each driver seperately
 							$DriverINFs = Get-ChildItem -Path $ContentLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
 							if ($DriverINFs -ne $null) {
+								[int]$uMaxStep = [int]($DriverINFs).Count
+								[int]$i = 1
 								foreach ($DriverINF in $DriverINFs) {
+									Invoke-ShowActionProgress -sActionText "Installing driver $($DriverINF.FullName) ($uStep of $uMaxStep)" -uStep $i -uMaxStep $uMaxStep
 									# Install specific driver
 									Write-CMLogEntry -Value " - Attempting to install driver: $($DriverINF.FullName)" -Severity 1
 									$ApplyDriverInvocation = Invoke-Executable -FilePath "dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:`"$($DriverINF.FullName)`""
@@ -1655,7 +1740,9 @@ Process {
 									else {
 										Write-CMLogEntry -Value " - An error occurred while installing driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
 									}
+									$i++
 								}
+								Remove-Variable -Name i -ErrorAction SilentlyContinue
 							}
 							else {
 								Write-CMLogEntry -Value " - An error occurred while enumerating driver paths, downloaded driver package does not contain any INF files" -Severity 3
@@ -1677,7 +1764,7 @@ Process {
 						Write-CMLogEntry -Value " - DriverInstallMode is currently set to: $($DriverInstallMode)" -Severity 1
 
 						# Apply drivers recursively
-						$ApplyDriverInvocation = Invoke-Executable -FilePath "dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($ContentLocation) /Recurse"
+						$ApplyDriverInvocation = Invoke-DISM -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($ContentLocation) /Recurse"
 						
 						# Validate driver injection
 						if ($ApplyDriverInvocation -eq 0) {
@@ -1714,6 +1801,7 @@ Process {
 	############
 	# NOTES
 	# - Add support for HP's driver software like hotkey etc
+	Invoke-ShowActionProgress -sActionText "Preparing installation of drivers..." -uStep 0 -uMaxStep 10
 
 	Write-CMLogEntry -Value "[ApplyDriverPackage]: Apply Driver Package process initiated" -Severity 1
 	if ($PSCmdLet.ParameterSetName -like "Debug") {
@@ -1732,7 +1820,8 @@ Process {
 	$SkipFallbackDriverPackageValidation = $false
 
     try {
-        Write-CMLogEntry -Value "[PrerequisiteChecker]: Starting environment prerequisite checker" -Severity 1
+		Write-CMLogEntry -Value "[PrerequisiteChecker]: Starting environment prerequisite checker" -Severity 1
+		Invoke-ShowActionProgress -sActionText "[PrerequisiteChecker]: Starting environment prerequisite checker" -uStep 1 -uMaxStep 10
 
         # Determine if running on supported computer system type
 		Get-ComputerSystemType
@@ -1750,7 +1839,8 @@ Process {
         $ComputerDetectionMethod = Set-ComputerDetectionMethod
 
         Write-CMLogEntry -Value "[PrerequisiteChecker]: Completed environment prerequisite checker" -Severity 1
-        Write-CMLogEntry -Value "[WebService]: Starting ConfigMgr WebService phase" -Severity 1
+		Write-CMLogEntry -Value "[WebService]: Starting ConfigMgr WebService phase" -Severity 1
+		Invoke-ShowActionProgress -sActionText "[WebService]: Starting ConfigMgr WebService phase" -uStep 2 -uMaxStep 10
 
         # Connect and establish connection to ConfigMgr WebService
         $WebService = Connect-WebService
@@ -1768,12 +1858,14 @@ Process {
 
 		Write-CMLogEntry -Value "[WebService]: Completed ConfigMgr WebService phase" -Severity 1
 		Write-CMLogEntry -Value "[DriverPackage]: Starting driver package matching phase" -Severity 1
+		Invoke-ShowActionProgress -sActionText "[DriverPackage]: Starting driver package matching phase" -uStep 3 -uMaxStep 10
 
 		# Match detected driver packages from web service call with computer details and OS image details gathered previously
 		Confirm-DriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -DriverPackage $DriverPackages
 
 		Write-CMLogEntry -Value "[DriverPackage]: Completed driver package matching phase" -Severity 1
 		Write-CMLogEntry -Value "[DriverPackageValidation]: Starting driver package validation phase" -Severity 1
+		Invoke-ShowActionProgress -sActionText "[DriverPackageValidation]: Starting driver package validation phase" -uStep 4 -uMaxStep 10
 
 		# Validate that at least one driver package was matched against computer data
 		# Check if multiple driver packages were detected and ensure the most recent one by sorting after the DateCreated property from original web service call
@@ -1785,6 +1877,7 @@ Process {
 		# This function will only run in the case that the parameter UseDriverFallback was specified and if the $DriverPackageList is empty at the point of execution
 		if ($PSBoundParameters["UseDriverFallback"]) {
 			Write-CMLogEntry -Value "[DriverPackageFallback]: Starting fallback driver package detection phase" -Severity 1
+			Invoke-ShowActionProgress -sActionText "[DriverPackageFallback]: Starting fallback driver package detection phase" -uStep 5 -uMaxStep 10
 
 			# Match detected fallback driver packages from web service call with computer details and OS image details
 			Confirm-FallbackDriverPackage -ComputerData $ComputerData -OSImageData $OSImageDetails -WebService $WebService
@@ -1807,6 +1900,7 @@ Process {
 
 			Write-CMLogEntry -Value "[DriverPackageDownload]: Completed driver package download phase" -Severity 1
 			Write-CMLogEntry -Value "[DriverPackageInstall]: Starting driver package install phase" -Severity 1
+			Invoke-ShowActionProgress -sActionText "[DriverPackageInstall]: Starting driver package install phase" -uStep 7 -uMaxStep 10
 
 			# Depending on deployment type, take action accordingly when applying the driver package files
 			Install-DriverPackageContent -ContentLocation $DriverPackageContentLocation
