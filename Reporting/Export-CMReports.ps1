@@ -7,6 +7,8 @@
     http://www.sqlmusings.com/2011/03/28/how-to-download-all-your-ssrs-report-definitions-rdl-files-using-powershell/
 .PARAMETER ReportServer
     Site Server where SQL Server Reporting Services are installed
+.PARAMETER WebServiceURL
+    The SSRS Web Service URL, if other than the default value "ReportServer". Only use this if the URL is not http://<servername>/ReportServer
 .PARAMETER SiteCode
     SiteCode of the Reporting Service point
 .PARAMETER RootFolderName
@@ -21,12 +23,22 @@
     Show a progressbar displaying the current operation
 .EXAMPLE
     .\Export-CMReports.ps1 -ReportServer CM01 -SiteCode PS1 -FolderName "Custom Reports" -ExportPath "C:\Export"
-    Export all the reports in a folder called 'Custom Reports' to 'C:\Export' on a report server called 'CM01':
+    Export all the reports in a folder called 'Custom Reports' to 'C:\Export' on a report server called 'CM01'
+.EXAMPLE
+    .\Export-CMReports.ps1 -ReportServer CM01 -WebServiceURL ReportServer_SCCM -RootFolderName CM_PS1 -FolderName "Custom Reports" -ExportPath "C:\Export"
+    Export all the reports in a folder called 'Custom Reports' to 'C:\Export' on a report server called 'CM01', with custom URL http://CM01/ReportServer_SCCM and root folder CM_PS1
 .NOTES
     Script name: Export-CMReports.ps1
     Author:      Nickolaj Andersen
     Contact:     @NickolajA
     DateCreated: 2014-11-24
+    Updated:     2021-03-02
+
+    Contributors: @merlinfrombelgium
+
+    Version history:
+    1.0 - (2014-11-24) Script created
+    1.1 - (2021-03-02) Updated script with support for custom Web Service URL
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -37,6 +49,8 @@ param(
     [string]$SiteCode,
     [parameter(Mandatory=$false,HelpMessage="Should only be specified if the default 'ConfigMgr_<sitecode>' folder is not used and a custom folder was created")]
     [string]$RootFolderName = "ConfigMgr",
+    [parameter(Mandatory=$false,HelpMessage="If specified, ReportServer URL is set to http://<servername>/`$ReportsUrl")]
+    [string]$WebServiceURL = "ReportServer",
     [parameter(Mandatory=$false,HelpMessage="If specified, search is restricted to within this folder if it exists")]
     [string]$FolderName,
     [parameter(Mandatory=$true,HelpMessage="Path to where the reports will be exported")]
@@ -51,7 +65,7 @@ param(
 )
 Begin {
     # Build the Uri
-    $SSRSUri = "http://$($ReportServer)/ReportServer/ReportService2010.asmx"
+    $SSRSUri = "http://$($ReportServer)/$($WebServiceURL)/ReportService2010.asmx"
     # Build the default or custom ConfigMgr path for a Reporting Service point
     if ($RootFolderName -like "ConfigMgr") {
         $SSRSRootFolderName = -join ("/","$($RootFolderName)","_",$($SiteCode))

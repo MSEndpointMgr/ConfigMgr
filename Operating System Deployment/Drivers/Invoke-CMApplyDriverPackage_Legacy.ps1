@@ -15,7 +15,7 @@
 	Specify the known secret key for the ConfigMgr WebService.
 
 .PARAMETER DeploymentType
-	Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade, DriverUpdate or PreCache (Same as OSUpgrade but only downloads the package content).
+	Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade, DriverUpdate, PreCache (Same as OSUpgrade but only downloads the package content) or Prestaged (Same as BareMetal but checks local cache first).
 	
 .PARAMETER Filter
 	Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.
@@ -60,15 +60,18 @@
 	# Detect and download (pre-caching content) during OS upgrade with ConfigMgr:
 	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType "PreCache"
 
+	# Detect, download and apply drivers during OS deployment with ConfigMgr when used with Prestaged Media:
+	.\Invoke-CMApplyDriverPackage.ps1 -URI "http://CM01.domain.com/ConfigMgrWebService/ConfigMgr.asmx" -SecretKey "12345" -Filter "Drivers" -DeploymentType "Prestaged"
+
 .NOTES
     FileName:    Invoke-CMApplyDriverPackage.ps1
 	Author:      Nickolaj Andersen / Maurice Daly
     Contact:     @NickolajA / @MoDaly_IT
     Created:     2017-03-27
-    Updated:     2020-02-10
+    Updated:     2020-07-22
 	
 	Minimum required version of ConfigMgr WebService: 1.6.0
-	Contributors: @CodyMathis123, @JamesMcwatty
+	Contributors: @CodyMathis123, @JamesMcwatty, @MerlinfromBE
     
     Version history:
     1.0.0 - (2017-03-27) Script created
@@ -128,6 +131,8 @@
 	2.2.7 - (2020-02-10) Added a new parameter named TargetOSVersion. Use this parameter when DeploymentType is OSUpgrade and you don't want to rely on the OS version detected from the imported Operating System Upgrade Package or Operating System Image objects.
 						 This parameter should mainly be used as an override and was implemented due to drivers for Windows 10 1903 were incorrectly detected when deploying or upgrading to Windows 10 1909 using imported source files, not for a 
 						 reference image for Windows 10 1909 as the Enablement Package would have flipped the build change to 18363 in such an image.
+  	2.2.8 - (2020-07-22) New deployment type named 'Prestaged' for use with Prestaged Media (OEMMedia) where driver packages may or may not be included on the media. This method will verify the package version (default behaviour for Prestaged Media deployments)
+             			 for prestaged/cached packages and download newer version if applicable, or will download package if it is not prestaged/cached. Drivers will be applied in same way as BareMetal deployment type.
 #>
 [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = "Execute")]
 param (
@@ -141,9 +146,9 @@ param (
 	[ValidateNotNullOrEmpty()]
 	[string]$SecretKey,
 	
-	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade, DriverUpdate or PreCache (Same as OSUpgrade but only downloads the package content).")]
+	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a different deployment scenario other than the default behavior. Choose between BareMetal (default), OSUpgrade, DriverUpdate, PreCache (Same as OSUpgrade but only downloads the package content) or Prestaged (Same as BareMetal but checks local cache first).")]
 	[parameter(Mandatory = $false, ParameterSetName = "Debug")]
-	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate", "PreCache")]
+	[ValidateSet("BareMetal", "OSUpgrade", "DriverUpdate", "PreCache", "Prestaged")]
 	[string]$DeploymentType = "BareMetal",
 	
 	[parameter(Mandatory = $false, ParameterSetName = "Execute", HelpMessage = "Define a filter used when calling ConfigMgr WebService to only return objects matching the filter.")]
@@ -187,7 +192,7 @@ param (
 )
 Begin {
 	# Define script version
-	$ScriptVersion = "2.2.7"
+	$ScriptVersion = "2.2.8"
 	
 	# Load Microsoft.SMS.TSEnvironment COM object
 	if ($PSCmdLet.ParameterSetName -like "Execute") {
@@ -421,7 +426,7 @@ Process {
 								else {
 									$OSBuild = $OSImage.Version
 								}
-
+								
 								# Create custom object for return value
 								$PSObject = [PSCustomObject]@{
 									OSVersion  = $OSBuild
@@ -480,7 +485,7 @@ Process {
 			}
 		}
 		catch [System.Exception] {
-			Write-CMLogEntry -Value "An error occured while calling ConfigMgr WebService to get OS Image data. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 3
+			Write-CMLogEntry -Value "An error occurred while calling ConfigMgr WebService to get OS Image data. Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 3
 		}
 	}
 	
@@ -678,7 +683,7 @@ Process {
 	
 	# Based upon deployment type, determine how to detect the OS image version and architecture properties, either from the OS defined in the running task sequence or from the running operating system
 	switch ($DeploymentType) {
-		"BareMetal" {
+		{$_ -in ("BareMetal","Prestaged")} {
 			# Get OS Image data
 			$OSImageData = Get-OSImageData
 			
@@ -894,10 +899,13 @@ Process {
 									Write-CMLogEntry -Value "Driver package list contains a single match, attempting to download driver package content - $($PackageList[0].PackageID)" -Severity 1
 									switch ($DeploymentType) {
 										"PreCache" {
-											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
+										$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
+										}
+										"Prestaged" {
+										$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMediaRootPath%SMS\PKG"
 										}
 										Default {
-											$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
+										$DownloadInvocation = Invoke-CMDownloadContent -PackageID $PackageList[0].PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
 										}
 									}
 									
@@ -907,7 +915,7 @@ Process {
 											Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
 											
 											switch ($DeploymentType) {
-												"BareMetal" {
+                        {$_ -in ("BareMetal","Prestaged")} {
 													# Apply drivers recursively from downloaded driver package location
 													Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
 													
@@ -915,7 +923,7 @@ Process {
 													switch ($DriverInstallMode) {
 														"Single" {
 															try {
-																# Get driver full path and install each driver seperately
+																# Get driver full path and install each driver separately
 																$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
 																if ($DriverINFs -ne $null) {
 																	foreach ($DriverINF in $DriverINFs) {
@@ -1031,103 +1039,106 @@ Process {
 									
 									# Validate that there's a package available for download
 									if ($Package -ne $null) {
-										# Attempt to download driver package content
-										Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
-										switch ($DeploymentType) {
-											"PreCache" {
-												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
-											}
+											# Attempt to download driver package content
+											Write-CMLogEntry -Value "Attempting to download driver package $($Package.PackageID) content from Distribution Point" -Severity 1
+											switch ($DeploymentType) {
+												"PreCache" {
+													$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType CCMCache -DestinationVariableName "OSDDriverPackage"
+												}
+												"Prestaged" {
+													$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMediaRootPath%SMS\PKG"
+												}
 											Default {
 												$DownloadInvocation = Invoke-CMDownloadContent -PackageID $Package.PackageID -DestinationLocationType Custom -DestinationVariableName "OSDDriverPackage" -CustomLocationPath "%_SMSTSMDataPath%\DriverPackage"
 											}
 										}
-										
+																
 										try {
 											if ($DownloadInvocation -eq 0) {
 												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
 												Write-CMLogEntry -Value "Driver files storage location set to $($OSDDriverPackageLocation)" -Severity 1
 
 												switch ($DeploymentType) {
-													"BareMetal" {
-														# Apply drivers recursively from downloaded driver package location
-														Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-														
-														# Determine driver injection method from parameter input
-														switch ($DriverInstallMode) {
-															"Single" {
-																try {
-																	# Get driver full path and install each driver seperately
-																	$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
-																	if ($DriverINFs -ne $null) {
-																		foreach ($DriverINF in $DriverINFs) {
-																			# Install specific driver
-																			Write-CMLogEntry -Value "Attempting to install driver: $($DriverINF.FullName)" -Severity 1
-																			$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
-																			
-																			# Validate driver injection
-																			if ($ApplyDriverInvocation -eq 0) {
-																				Write-CMLogEntry -Value "Successfully applied driver using dism.exe" -Severity 1
-																			}
-																			else {
-																				Write-CMLogEntry -Value "An error occurred while applying driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																			}
-																		}
-																	}
-																	else {
-																		Write-CMLogEntry -Value "An error occurred while enumerating driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
-																	}
-																}
-																catch [System.Exception] {
-																	Write-CMLogEntry -Value "An error occurred while installing drivers. See DISM.log for more details" -Severity 2
-																}
+												{$_ -in ("BareMetal","Prestaged")} {
+													# Apply drivers recursively from downloaded driver package location
+													Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
+																				
+													# Determine driver injection method from parameter input
+													switch ($DriverInstallMode) {
+													"Single" {
+														try {
+														# Get driver full path and install each driver seperately
+														$DriverINFs = Get-ChildItem -Path $OSDDriverPackageLocation -Recurse -Filter "*.inf" -ErrorAction Stop | Select-Object -Property FullName, Name
+														if ($DriverINFs -ne $null) {
+															foreach ($DriverINF in $DriverINFs) {
+															# Install specific driver
+															Write-CMLogEntry -Value "Attempting to install driver: $($DriverINF.FullName)" -Severity 1
+															$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($DriverINF.FullName)"
+																									
+															# Validate driver injection
+															if ($ApplyDriverInvocation -eq 0) {
+																Write-CMLogEntry -Value "Successfully applied driver using dism.exe" -Severity 1
 															}
-															"Recurse" {
-																# Apply drivers recursively
-																$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
-																
-																# Validate driver injection
-																if ($ApplyDriverInvocation -eq 0) {
-																	Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
-																}
-																else {
-																	Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
-																}
+															else {
+																Write-CMLogEntry -Value "An error occurred while applying driver. Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
+															}
 															}
 														}
+														else {
+															Write-CMLogEntry -Value "An error occurred while enumerating driver paths, downloaded driver package does not contain any INF files" -Severity 3; exit 22
+														}
+														}
+														catch [System.Exception] {
+														Write-CMLogEntry -Value "An error occurred while installing drivers. See DISM.log for more details" -Severity 2
+														}
 													}
-													"OSUpgrade" {
-														# For OSUpgrade, don't attempt to install drivers as this is handled by setup.exe when used together with OSDUpgradeStagedContent
-														Write-CMLogEntry -Value "Driver package content downloaded successfully and located in: $($OSDDriverPackageLocation)" -Severity 1
-														
-														# Set OSDUpgradeStagedContent task sequence variable
-														Write-CMLogEntry -Value "Attempting to set OSDUpgradeStagedContent task sequence variable with value: $($OSDDriverPackageLocation)" -Severity 1
-														$TSEnvironment.Value("OSDUpgradeStagedContent") = "$($OSDDriverPackageLocation)"
-														Write-CMLogEntry -Value "Successfully completed driver package staging process" -Severity 1
+													"Recurse" {
+														# Apply drivers recursively
+														$ApplyDriverInvocation = Invoke-Executable -FilePath "Dism.exe" -Arguments "/Image:$($TSEnvironment.Value('OSDTargetSystemDrive'))\ /Add-Driver /Driver:$($OSDDriverPackageLocation) /Recurse"
+																						
+														# Validate driver injection
+														if ($ApplyDriverInvocation -eq 0) {
+														Write-CMLogEntry -Value "Successfully applied drivers using dism.exe" -Severity 1
+														}
+														else {
+														Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Continuing with warning code: $($ApplyDriverInvocation). See DISM.log for more details" -Severity 2
+														}
 													}
-													"DriverUpdate" {
-														# Apply drivers recursively from downloaded driver package location
-														Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
-														$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
-														Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
 													}
-													"PreCache" {
-														# Driver package content downloaded successfully, log output and exit script
-														Write-CMLogEntry -Value "Driver package content successfully downloaded and pre-cached to: $($OSDDriverPackageLocation)" -Severity 1
-													}
+												}
+												"OSUpgrade" {
+													# For OSUpgrade, don't attempt to install drivers as this is handled by setup.exe when used together with OSDUpgradeStagedContent
+													Write-CMLogEntry -Value "Driver package content downloaded successfully and located in: $($OSDDriverPackageLocation)" -Severity 1
+																				
+													# Set OSDUpgradeStagedContent task sequence variable
+													Write-CMLogEntry -Value "Attempting to set OSDUpgradeStagedContent task sequence variable with value: $($OSDDriverPackageLocation)" -Severity 1
+													$TSEnvironment.Value("OSDUpgradeStagedContent") = "$($OSDDriverPackageLocation)"
+													Write-CMLogEntry -Value "Successfully completed driver package staging process" -Severity 1
+												}
+												"DriverUpdate" {
+													# Apply drivers recursively from downloaded driver package location
+													Write-CMLogEntry -Value "Driver package content downloaded successfully, attempting to apply drivers using pnputil.exe located in: $($OSDDriverPackageLocation)" -Severity 1
+													$ApplyDriverInvocation = Invoke-Executable -FilePath "powershell.exe" -Arguments "pnputil /add-driver $(Join-Path -Path $OSDDriverPackageLocation -ChildPath '*.inf') /subdirs /install | Out-File -FilePath (Join-Path -Path $($LogsDirectory) -ChildPath 'Install-Drivers.txt') -Force"
+													Write-CMLogEntry -Value "Successfully applied drivers" -Severity 1
+												}
+												"PreCache" {
+													# Driver package content downloaded successfully, log output and exit script
+													Write-CMLogEntry -Value "Driver package content successfully downloaded and pre-cached to: $($OSDDriverPackageLocation)" -Severity 1
+												}
 												}
 											}
 											else {
 												Write-CMLogEntry -Value "Driver package content download process returned an unhandled exit code: $($DownloadInvocation)" -Severity 3; exit 13
 											}
-										}
-										catch [System.Exception] {
+											}
+											catch [System.Exception] {
 											Write-CMLogEntry -Value "An error occurred while applying drivers (multiple package match). Error message at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)" -Severity 3; exit 15
+											}
 										}
-									}
-									else {
-										Write-CMLogEntry -Value "An error occurred while selecting manufacturer specific driver packages from list, empty list of packages detected" -Severity 3
-										switch ($DeploymentType) {
-											"BareMetal" {
+										else {
+											Write-CMLogEntry -Value "An error occurred while selecting manufacturer specific driver packages from list, empty list of packages detected" -Severity 3
+											switch ($DeploymentType) {
+											{$_ -in ("BareMetal","Prestaged")} {
 												exit 21
 											}
 											default {
@@ -1143,7 +1154,7 @@ Process {
 							else {
 								Write-CMLogEntry -Value "Unable to determine a matching driver package from package list array, unhandled amount of matches" -Severity 2
 								switch ($DeploymentType) {
-									"BareMetal" {
+									{$_ -in ("BareMetal","Prestaged")} {
 										exit 7
 									}
 									default {
@@ -1183,7 +1194,7 @@ Process {
 												$OSDDriverPackageLocation = $($TSEnvironment.Value('OSDDriverPackage01'))
 												Write-CMLogEntry -Value "Driver files are storage location set to $($OSDDriverPackageLocation)" -Severity 1
 												switch ($DeploymentType) {
-													"BareMetal" {
+													{$_ -in ("BareMetal","Prestaged")} {
 														# Apply drivers recursively from downloaded driver package location
 														Write-CMLogEntry -Value "Fall back driver package content downloaded successfully, attempting to apply drivers using dism.exe located in: $($OSDDriverPackageLocation)" -Severity 1
 														# Determine driver injection method from parameter input
